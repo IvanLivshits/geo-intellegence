@@ -10,8 +10,6 @@ declare global {
   }
 }
 
-const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
-
 export interface SearchPoint {
   lat: number;
   lon: number;
@@ -22,8 +20,18 @@ export default function SearchBar({ onSelect }: { onSelect: (point: SearchPoint)
   const inputRef = useRef<HTMLInputElement>(null);
   const autocompleteRef = useRef<any>(null);
   const [ready, setReady] = useState(false);
+  const [gmapsKey, setGmapsKey] = useState('');
 
-  const hasKey = Boolean(KEY);
+  useEffect(() => {
+    fetch('/api/config')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c: { gmapsKey?: string } | null) => {
+        if (c?.gmapsKey) setGmapsKey(c.gmapsKey);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const hasKey = Boolean(gmapsKey);
 
   useEffect(() => {
     if (!hasKey || autocompleteRef.current) return;
@@ -75,7 +83,7 @@ export default function SearchBar({ onSelect }: { onSelect: (point: SearchPoint)
     <div className="relative flex-1">
       {hasKey && (
         <Script
-          src={`https://maps.googleapis.com/maps/api/js?key=${KEY}&libraries=places`}
+          src={`https://maps.googleapis.com/maps/api/js?key=${gmapsKey}&libraries=places`}
           strategy="afterInteractive"
           onLoad={() => setReady(true)}
         />
