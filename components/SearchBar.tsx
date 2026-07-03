@@ -10,7 +10,7 @@ declare global {
   }
 }
 
-const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || 'AIzaSyCHTUG75xPJjjVec2rqvjQn4kOuV6Y0viI';
+const KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 export interface SearchPoint {
   lat: number;
