@@ -26,23 +26,33 @@ export default function SearchBar({ onSelect }: { onSelect: (point: SearchPoint)
   const hasKey = Boolean(KEY);
 
   useEffect(() => {
-    if (!hasKey || !ready || !inputRef.current || !window.google) return;
-    if (autocompleteRef.current) return;
+    if (!hasKey || autocompleteRef.current) return;
 
-    const ac = new window.google.maps.places.Autocomplete(inputRef.current, {
-      fields: ['geometry', 'name', 'formatted_address'],
-    });
-    autocompleteRef.current = ac;
-
-    ac.addListener('place_changed', () => {
-      const place = ac.getPlace();
-      if (!place.geometry || !place.geometry.location) return;
-      onSelect({
-        lat: place.geometry.location.lat(),
-        lon: place.geometry.location.lng(),
-        label: place.name || place.formatted_address || '',
+    const tryInit = (): boolean => {
+      if (autocompleteRef.current) return true;
+      const places = window.google?.maps?.places;
+      if (!places || !inputRef.current) return false;
+      const ac = new places.Autocomplete(inputRef.current, {
+        fields: ['geometry', 'name', 'formatted_address'],
       });
-    });
+      autocompleteRef.current = ac;
+      ac.addListener('place_changed', () => {
+        const place = ac.getPlace();
+        if (!place.geometry || !place.geometry.location) return;
+        onSelect({
+          lat: place.geometry.location.lat(),
+          lon: place.geometry.location.lng(),
+          label: place.name || place.formatted_address || '',
+        });
+      });
+      return true;
+    };
+
+    if (tryInit()) return;
+    const id = setInterval(() => {
+      if (tryInit()) clearInterval(id);
+    }, 300);
+    return () => clearInterval(id);
   }, [hasKey, ready, onSelect]);
 
   async function geocodeQuery() {
