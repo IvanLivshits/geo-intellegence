@@ -21,25 +21,3 @@
   }
 }
 
-.pac-container {
-  z-index: 9999;
-  background: #0c0c0b;
-  border: 1px solid #1f2228;
-  border-radius: 0;
-  box-shadow: none;
-  font-family: var(--font-sans), sans-serif;
-}
-
-.pac-item {
-  color: #7d8187;
-  border-color: #1f2228;
-}
-
-.pac-item:hover,
-.pac-item-selected {
-  background: #141619;
-}
-
-.pac-item-query {
-  color: #ffffff;
-}

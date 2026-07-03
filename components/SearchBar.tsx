@@ -1,14 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Script from 'next/script';
 import { Input } from '@/components/ui/input';
-
-declare global {
-  interface Window {
-    google?: any;
-  }
-}
 
 export interface SearchPoint {
   lat: number;
@@ -16,57 +9,71 @@ export interface SearchPoint {
   label: string;
 }
 
+interface Suggestion {
+  id: string;
+  label: string;
+  lat?: number;
+  lon?: number;
+}
+
 export default function SearchBar({ onSelect }: { onSelect: (point: SearchPoint) => void }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<any>(null);
-  const [ready, setReady] = useState(false);
-  const [gmapsKey, setGmapsKey] = useState('');
+  const [value, setValue] = useState('');
+  const [items, setItems] = useState<Suggestion[]>([]);
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const skipNextFetch = useRef(false);
 
   useEffect(() => {
-    fetch('/api/config')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((c: { gmapsKey?: string } | null) => {
-        if (c?.gmapsKey) setGmapsKey(c.gmapsKey);
-      })
-      .catch(() => undefined);
+    if (skipNextFetch.current) {
+      skipNextFetch.current = false;
+      return;
+    }
+    const q = value.trim();
+    if (q.length < 3) {
+      setItems([]);
+      setOpen(false);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/suggest?q=' + encodeURIComponent(q));
+        if (!res.ok) return;
+        const list: Suggestion[] = await res.json();
+        setItems(list);
+        setOpen(list.length > 0);
+      } catch {
+        return;
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [value]);
+
+  useEffect(() => {
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, []);
 
-  const hasKey = Boolean(gmapsKey);
+  async function pick(s: Suggestion) {
+    setOpen(false);
+    skipNextFetch.current = true;
+    setValue(s.label);
+    if (s.lat != null && s.lon != null) {
+      onSelect({ lat: s.lat, lon: s.lon, label: s.label });
+      return;
+    }
+    const res = await fetch('/api/place?id=' + encodeURIComponent(s.id));
+    if (!res.ok) return;
+    const p: SearchPoint = await res.json();
+    onSelect({ lat: p.lat, lon: p.lon, label: p.label || s.label });
+  }
 
-  useEffect(() => {
-    if (!hasKey || autocompleteRef.current) return;
-
-    const tryInit = (): boolean => {
-      if (autocompleteRef.current) return true;
-      const places = window.google?.maps?.places;
-      if (!places || !inputRef.current) return false;
-      const ac = new places.Autocomplete(inputRef.current, {
-        fields: ['geometry', 'name', 'formatted_address'],
-      });
-      autocompleteRef.current = ac;
-      ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        if (!place.geometry || !place.geometry.location) return;
-        onSelect({
-          lat: place.geometry.location.lat(),
-          lon: place.geometry.location.lng(),
-          label: place.name || place.formatted_address || '',
-        });
-      });
-      return true;
-    };
-
-    if (tryInit()) return;
-    const id = setInterval(() => {
-      if (tryInit()) clearInterval(id);
-    }, 300);
-    return () => clearInterval(id);
-  }, [hasKey, ready, onSelect]);
-
-  async function geocodeQuery() {
-    const query = inputRef.current?.value.trim();
-    if (!query) return;
-    const res = await fetch('/api/geocode?q=' + encodeURIComponent(query));
+  async function geocodeFallback() {
+    const q = value.trim();
+    if (!q) return;
+    const res = await fetch('/api/geocode?q=' + encodeURIComponent(q));
     if (!res.ok) return;
     const loc = await res.json();
     onSelect({ lat: loc.lat, lon: loc.lon, label: loc.displayName });
@@ -75,28 +82,42 @@ export default function SearchBar({ onSelect }: { onSelect: (point: SearchPoint)
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') {
       event.preventDefault();
-      geocodeQuery();
+      if (open && items.length) pick(items[0]);
+      else geocodeFallback();
     }
+    if (event.key === 'Escape') setOpen(false);
   }
 
   return (
-    <div className="relative flex-1">
-      {hasKey && (
-        <Script
-          src={`https://maps.googleapis.com/maps/api/js?key=${gmapsKey}&libraries=places`}
-          strategy="afterInteractive"
-          onLoad={() => setReady(true)}
-        />
-      )}
+    <div ref={boxRef} className="relative flex-1">
       <Input
         id="search"
-        ref={inputRef}
         type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
         placeholder="Поиск адреса или места…"
         autoComplete="off"
         onKeyDown={handleKeyDown}
+        onFocus={() => items.length && setOpen(true)}
         className="h-10 rounded-full py-0"
       />
+      {open && (
+        <div className="absolute left-2 right-2 top-11 z-30 overflow-hidden border border-graphite bg-void-black">
+          {items.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pick(s);
+              }}
+              className="block w-full truncate px-4 py-2.5 text-left font-sans text-body text-ash hover:bg-charcoal hover:text-stellar-white"
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
