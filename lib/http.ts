@@ -94,7 +94,9 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
           await sleep(1500 * (attempt + 1));
           continue;
         }
-        throw new Error(`HTTP ${res.status} for ${url}`);
+        const err = new Error(`HTTP ${res.status} for ${url}`) as Error & { noRetry?: boolean };
+        err.noRetry = res.status >= 400 && res.status < 500 && res.status !== 429;
+        throw err;
       }
       const data = json ? await res.json() : await res.text();
       console.log(`[сеть] ✓ ${host} · ${Date.now() - started} мс`);
@@ -103,6 +105,7 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
     } catch (err) {
       lastErr = err;
       console.warn(`[сеть] ✕ ${host} · ${(err as Error).message}`);
+      if ((err as Error & { noRetry?: boolean }).noRetry) throw err;
       if (attempt < retries) await sleep(1000 * (attempt + 1));
     }
   }

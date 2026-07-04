@@ -12,8 +12,6 @@ export interface SearchPoint {
 interface Suggestion {
   id: string;
   label: string;
-  lat?: number;
-  lon?: number;
 }
 
 export default function SearchBar({ onSelect }: { onSelect: (point: SearchPoint) => void }) {
@@ -60,30 +58,16 @@ export default function SearchBar({ onSelect }: { onSelect: (point: SearchPoint)
     setOpen(false);
     skipNextFetch.current = true;
     setValue(s.label);
-    if (s.lat != null && s.lon != null) {
-      onSelect({ lat: s.lat, lon: s.lon, label: s.label });
-      return;
-    }
     const res = await fetch('/api/place?id=' + encodeURIComponent(s.id));
     if (!res.ok) return;
     const p: SearchPoint = await res.json();
     onSelect({ lat: p.lat, lon: p.lon, label: p.label || s.label });
   }
 
-  async function geocodeFallback() {
-    const q = value.trim();
-    if (!q) return;
-    const res = await fetch('/api/geocode?q=' + encodeURIComponent(q));
-    if (!res.ok) return;
-    const loc = await res.json();
-    onSelect({ lat: loc.lat, lon: loc.lon, label: loc.displayName });
-  }
-
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') {
       event.preventDefault();
-      if (open && items.length) pick(items[0]);
-      else geocodeFallback();
+      if (items.length) pick(items[0]);
     }
     if (event.key === 'Escape') setOpen(false);
   }

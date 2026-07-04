@@ -24,14 +24,22 @@ export interface ActivitySource {
   dist: number;
 }
 
+export interface ScanFacts {
+  elevationM: number | null;
+  roadsKm: number;
+  buildingHeightAvgM: number | null;
+}
+
 export interface ScanPayload {
   center: [number, number];
   radius: number;
   label: string | null;
   buildings: Building[];
   roads: Road[];
+  powerLines: Road[];
   activity: ActivitySource[];
   masks: Record<MaskKey, MaskField>;
+  facts: ScanFacts;
 }
 
 export interface GeocodeResult {

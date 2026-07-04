@@ -4,8 +4,10 @@ import { MASK_META, type MaskKey } from './constants';
 import { computeNoiseMask } from './noise-mask';
 import { computeAirMask } from './air';
 import { computeFloodMask } from './flood';
-import { computeOfficialFloodMask } from './official-flood';
+import { computeOfficialFloodMask, computeOfficialFloodFutureMask } from './official-flood';
 import { computePluvialMask } from './pluvial';
+import { computeSeismicMask } from './seismic';
+import { computeLandslideMask } from './landslide';
 
 export interface MaskContext {
   lat: number;
@@ -21,7 +23,10 @@ const MASK_PROVIDERS: Record<MaskKey, MaskCompute> = {
   air: computeAirMask,
   flood: computeFloodMask,
   q100: computeOfficialFloodMask,
+  q100f: computeOfficialFloodFutureMask,
   pluvial: computePluvialMask,
+  seismic: computeSeismicMask,
+  landslide: computeLandslideMask,
 };
 
 function emptyMask(key: MaskKey): MaskField {

@@ -60,7 +60,19 @@ export const PLUVIAL_RAMP: RampStop[] = [
   [1.0, [153, 246, 228]],
 ];
 
-export type MaskKey = 'noise' | 'air' | 'flood' | 'q100' | 'pluvial';
+export const SEISMIC_RAMP: RampStop[] = [
+  [0.0, [134, 239, 172]],
+  [0.5, [251, 146, 60]],
+  [1.0, [190, 18, 60]],
+];
+
+export const LANDSLIDE_RAMP: RampStop[] = [
+  [0.0, [254, 240, 138]],
+  [0.5, [217, 119, 6]],
+  [1.0, [120, 53, 15]],
+];
+
+export type MaskKey = 'noise' | 'air' | 'flood' | 'q100' | 'q100f' | 'pluvial' | 'seismic' | 'landslide';
 
 export interface MaskMeta {
   key: MaskKey;
@@ -68,6 +80,7 @@ export interface MaskMeta {
   ramp: RampStop[];
   lowLabel: string;
   highLabel: string;
+  hidden?: boolean;
 }
 
 export const MASK_META: Record<MaskKey, MaskMeta> = {
@@ -75,14 +88,18 @@ export const MASK_META: Record<MaskKey, MaskMeta> = {
   air: { key: 'air', label: 'Качество воздуха', ramp: AIR_RAMP, lowLabel: 'чистый', highLabel: 'грязный' },
   flood: { key: 'flood', label: 'Риск разлива рек', ramp: FLOOD_RAMP, lowLabel: 'сухо', highLabel: 'зальёт' },
   q100: { key: 'q100', label: 'Прогноз наводнений', ramp: Q100_RAMP, lowLabel: 'мелко', highLabel: 'глубоко' },
+  q100f: { key: 'q100f', label: 'Прогноз наводнений · 2050', ramp: Q100_RAMP, lowLabel: 'мелко', highLabel: 'глубоко', hidden: true },
   pluvial: { key: 'pluvial', label: 'Ливневое подтопление', ramp: PLUVIAL_RAMP, lowLabel: 'стечёт', highLabel: 'застой' },
+  seismic: { key: 'seismic', label: 'Сейсмика', ramp: SEISMIC_RAMP, lowLabel: 'спокойно', highLabel: 'сильные толчки' },
+  landslide: { key: 'landslide', label: 'Оползни', ramp: LANDSLIDE_RAMP, lowLabel: 'ровно', highLabel: 'опасный склон' },
 };
 
-export type ActivityCategory = 'nightlife' | 'retail' | 'venue' | 'hub';
+export type ActivityCategory = 'nightlife' | 'retail' | 'venue' | 'hub' | 'hazard';
 
 export const ACTIVITY_CATEGORIES: Record<ActivityCategory, { color: [number, number, number]; label: string }> = {
   nightlife: { color: [168, 85, 247], label: 'ночная жизнь' },
   retail: { color: [124, 110, 230], label: 'крупный ритейл' },
   venue: { color: [236, 72, 153], label: 'площадки и досуг' },
   hub: { color: [110, 130, 210], label: 'хабы и стройка' },
+  hazard: { color: [248, 113, 113], label: 'опасные соседи' },
 };

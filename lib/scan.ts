@@ -1,5 +1,6 @@
-import { metresToDegLat, metresToDegLon } from './geo';
+import { haversine, metresToDegLat, metresToDegLon } from './geo';
 import { overpass } from './http';
+import { sampleElevations } from './dem';
 import type { OsmElement, OsmGeometryPoint } from './noise-model';
 import { extractActivity } from './activity-sources';
 import { computeOvertureBuildings } from './overture';
@@ -153,15 +154,20 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
         way(${bbox})[railway=rail]; )->.roads;
       ( way(${bbox})[building];
         relation(${bbox})[building]; )->.bld;
-      ( nwr(${bbox})[amenity~"^(nightclub|bar|pub|marketplace|cinema|theatre|events_venue|bus_station)$"];
+      ( nwr(${bbox})[amenity~"^(nightclub|bar|pub|marketplace|cinema|theatre|events_venue|bus_station|fuel)$"];
         nwr(${bbox})[shop=mall];
         nwr(${bbox})[building=retail];
         nwr(${bbox})[leisure=stadium];
         nwr(${bbox})[railway~"^(station|subway_entrance|tram_stop)$"];
-        nwr(${bbox})[landuse~"^(construction|industrial)$"]; )->.act;
+        nwr(${bbox})[landuse~"^(construction|industrial)$"];
+        nwr(${bbox})[man_made=storage_tank];
+        nwr(${bbox})[aeroway=aerodrome];
+        nwr(${bbox})[power=substation]; )->.act;
+      ( way(${bbox})[power=line]; )->.pw;
       .roads out geom;
       .bld out geom;
-      .act out center;`;
+      .act out center;
+      .pw out geom;`;
 
   const overturePromise = computeOvertureBuildings({ lat, lon, radius }).catch((err) => {
     console.warn(`[overture] застройка недоступна, фолбэк на OSM: ${err instanceof Error ? err.message : String(err)}`);
@@ -211,9 +217,28 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
     }
   }
 
+  const powerLines: Road[] = [];
+  for (const el of els) {
+    const t = el.tags || {};
+    if (el.type !== 'way' || t.power !== 'line') continue;
+    if (!Array.isArray(el.geometry) || el.geometry.length < 2) continue;
+    const coords: SegPoint[] = el.geometry.map((p): SegPoint => [p.lon, p.lat, 8]);
+    for (const path of clipPathToBox(coords, box)) {
+      powerLines.push({ path, width: 2, rail: false });
+    }
+  }
+
   const activity = extractActivity(els, lat, lon, radius);
 
-  const [overture, masks] = await Promise.all([overturePromise, masksPromise]);
+  const elevationPromise = sampleElevations([{ lat, lon }])
+    .then((e) => e[0])
+    .catch(() => null);
+
+  const [overture, masks, elevation] = await Promise.all([
+    overturePromise,
+    masksPromise,
+    elevationPromise,
+  ]);
   const buildings =
     overture && overture.buildings.length > osmBuildings.length ? overture.buildings : osmBuildings;
   const buildingsSource = buildings === osmBuildings ? 'OSM' : 'Overture';
@@ -221,13 +246,30 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
     `[карта] застройка: ${buildingsSource} ${buildings.length} (OSM ${osmBuildings.length}) · дороги/ж-д: ${roads.length} · активность: ${activity.length} · маски: шум ${masks.noise.avg ?? '—'} дБ · воздух ${masks.air.avg ?? '—'} · затопление ${masks.flood.avg ?? '—'}`,
   );
 
+  let roadsM = 0;
+  for (const r of roads) {
+    for (let i = 0; i < r.path.length - 1; i++) {
+      roadsM += haversine(r.path[i][1], r.path[i][0], r.path[i + 1][1], r.path[i + 1][0]);
+    }
+  }
+  const heights = buildings.map((b) => b.height).filter((h) => Number.isFinite(h) && h > 0);
+  const facts = {
+    elevationM: elevation != null ? Math.round(elevation) : null,
+    roadsKm: Math.round(roadsM / 100) / 10,
+    buildingHeightAvgM: heights.length
+      ? Math.round((heights.reduce((s, h) => s + h, 0) / heights.length) * 10) / 10
+      : null,
+  };
+
   return {
     center: [lon, lat],
     radius,
     label,
     buildings,
     roads,
+    powerLines,
     activity,
     masks,
+    facts,
   };
 }

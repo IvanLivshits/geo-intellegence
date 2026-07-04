@@ -13,12 +13,14 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
-export type BaseLayerKey = 'buildings' | 'roads';
+export type BaseLayerKey = 'buildings' | 'roads' | 'power';
 
 export interface InspectorProps {
   payload: ScanPayload;
   maskOn: Record<MaskKey, boolean>;
   onToggleMask: (mask: MaskKey) => void;
+  scenario2050: boolean;
+  onToggleScenario: () => void;
   layerOn: Record<BaseLayerKey, boolean>;
   onToggleLayer: (key: BaseLayerKey) => void;
   catOn: Record<ActivityCategory, boolean>;
@@ -29,7 +31,7 @@ export interface InspectorProps {
 }
 
 const rgb = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
-const MASK_ORDER = Object.keys(MASK_META) as MaskKey[];
+const MASK_ORDER = (Object.keys(MASK_META) as MaskKey[]).filter((k) => !MASK_META[k].hidden);
 
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -70,10 +72,34 @@ function Row({
 const chip = 'h-3 w-3 shrink-0 rounded-none border border-graphite';
 const dot = 'h-2.5 w-2.5 shrink-0 rounded-full';
 
+function maskSharePct(mask?: { n: number; rgba: number[] }): number | null {
+  if (!mask) return null;
+  const total = mask.n * mask.n;
+  let visible = 0;
+  for (let i = 3; i < mask.rgba.length; i += 4) {
+    if (mask.rgba[i] > 0) visible++;
+  }
+  return Math.round((visible / total) * 100);
+}
+
+function Fact({ value, unit, label }: { value: string | number | null; unit?: string; label: string }) {
+  return (
+    <div className="border border-graphite p-3">
+      <div className="font-sans text-body-lg leading-tight text-stellar-white">
+        {value ?? '—'}
+        {unit && value != null ? <span className="ml-1 font-mono text-mono-badge text-ash">{unit}</span> : null}
+      </div>
+      <div className="mt-1 font-mono text-[10px] leading-tight tracking-wider text-ash">{label}</div>
+    </div>
+  );
+}
+
 export default function InspectorPanel({
   payload,
   maskOn,
   onToggleMask,
+  scenario2050,
+  onToggleScenario,
   layerOn,
   onToggleLayer,
   catOn,
@@ -106,8 +132,9 @@ export default function InspectorPanel({
       <Section label="Что показать">
         <div className="flex flex-col">
           {MASK_ORDER.map((key) => {
+            const effKey = key === 'q100' && scenario2050 ? 'q100f' : key;
             const meta = MASK_META[key];
-            const mask = payload.masks[key];
+            const mask = payload.masks[effKey];
             const on = maskOn[key];
             return (
               <div key={key}>
@@ -143,6 +170,19 @@ export default function InspectorPanel({
                       <span>{meta.lowLabel}</span>
                       <span>{meta.highLabel}</span>
                     </div>
+                    {key === 'q100' && (
+                      <div className="mt-2 flex items-center justify-between">
+                        <span
+                          className={cn(
+                            'font-mono text-[10px] tracking-wider',
+                            scenario2050 ? 'text-stellar-white' : 'text-ash',
+                          )}
+                        >
+                          Сценарий 2050 · клим. RCP 8.5
+                        </span>
+                        <Switch checked={scenario2050} onCheckedChange={onToggleScenario} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -169,6 +209,15 @@ export default function InspectorPanel({
           checked={layerOn.roads}
           onCheckedChange={() => onToggleLayer('roads')}
         />
+        {payload.powerLines.length > 0 && (
+          <Row
+            indicator={<span className={chip} style={{ background: 'rgb(248,113,113)' }} />}
+            label="ЛЭП"
+            meta={`${payload.powerLines.length}`}
+            checked={layerOn.power}
+            onCheckedChange={() => onToggleLayer('power')}
+          />
+        )}
 
         <div className="flex items-center justify-between py-2">
           <button
@@ -217,11 +266,13 @@ export default function InspectorPanel({
       {MASK_ORDER.some((key) => maskOn[key] && payload.masks[key]) && (
         <Section label="Статистика">
           <dl className="flex flex-col gap-2 font-sans text-body">
-            {MASK_ORDER.filter((key) => maskOn[key] && payload.masks[key]).map((key) => {
-              const mask = payload.masks[key];
+            {MASK_ORDER.filter((key) => maskOn[key]).map((key) => {
+              const effKey = key === 'q100' && scenario2050 ? 'q100f' : key;
+              const mask = payload.masks[effKey];
+              if (!mask) return null;
               return (
                 <div key={key} className="flex justify-between gap-3">
-                  <dt className="truncate text-ash">{MASK_META[key].label}</dt>
+                  <dt className="truncate text-ash">{MASK_META[effKey].label}</dt>
                   <dd className="shrink-0 text-stellar-white">
                     {mask.avg ?? '—'}
                     {mask.min != null && mask.max != null ? ` (${mask.min}–${mask.max})` : ''} {mask.unit}
@@ -232,6 +283,19 @@ export default function InspectorPanel({
           </dl>
         </Section>
       )}
+
+      <Section label="Факты">
+        <div className="grid grid-cols-2 gap-2">
+          <Fact value={payload.facts.elevationM} unit="м" label="над уровнем моря" />
+          <Fact value={payload.buildings.length} label="зданий рядом" />
+          <Fact value={payload.facts.buildingHeightAvgM} unit="м" label="средняя высота зданий" />
+          <Fact value={payload.facts.roadsKm} unit="км" label="дорожной сети" />
+          <Fact value={maskSharePct(payload.masks.q100)} unit="%" label="площади в зоне паводка" />
+          <Fact value={maskSharePct(payload.masks.pluvial)} unit="%" label="застоя при ливне" />
+          <Fact value={payload.masks.seismic?.avg ?? null} unit="%g" label="сейсмика · PGA" />
+          <Fact value={payload.masks.air?.avg ?? null} unit="EAQI" label="воздух сейчас" />
+        </div>
+      </Section>
     </aside>
   );
 }

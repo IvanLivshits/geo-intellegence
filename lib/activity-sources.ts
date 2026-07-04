@@ -26,6 +26,10 @@ const KIND: Record<string, KindSpec> = {
   tram_stop: { category: 'hub', label: 'трамвай', radius: 80 },
   construction: { category: 'hub', label: 'стройка', radius: 200 },
   industrial: { category: 'hub', label: 'промзона', radius: 220 },
+  fuel: { category: 'hazard', label: 'АЗС', radius: 100 },
+  storage_tank: { category: 'hazard', label: 'резервуар топлива/газа', radius: 200 },
+  aerodrome: { category: 'hazard', label: 'аэродром', radius: 1000 },
+  substation: { category: 'hazard', label: 'электроподстанция', radius: 120 },
 };
 
 function kindOf(tags: Record<string, string> = {}): string | null {
@@ -33,12 +37,15 @@ function kindOf(tags: Record<string, string> = {}): string | null {
   if (
     a &&
     KIND[a] &&
-    ['nightclub', 'bar', 'pub', 'marketplace', 'cinema', 'theatre', 'events_venue', 'bus_station'].includes(a)
+    ['nightclub', 'bar', 'pub', 'marketplace', 'cinema', 'theatre', 'events_venue', 'bus_station', 'fuel'].includes(a)
   )
     return a;
   if (tags.shop === 'mall') return 'mall';
   if (tags.building === 'retail') return 'retail';
   if (tags.leisure === 'stadium') return 'stadium';
+  if (tags.man_made === 'storage_tank') return 'storage_tank';
+  if (tags.aeroway === 'aerodrome') return 'aerodrome';
+  if (tags.power === 'substation') return 'substation';
   const rw = tags.railway;
   if (rw === 'station' || rw === 'subway_entrance' || rw === 'tram_stop') return rw;
   const lu = tags.landuse;

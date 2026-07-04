@@ -51,6 +51,7 @@ const ALL_CATS: Record<ActivityCategory, boolean> = {
   retail: false,
   venue: false,
   hub: false,
+  hazard: false,
 };
 
 const DEFAULT_MASKS: Record<MaskKey, boolean> = {
@@ -58,10 +59,13 @@ const DEFAULT_MASKS: Record<MaskKey, boolean> = {
   air: false,
   flood: false,
   q100: false,
+  q100f: false,
   pluvial: false,
+  seismic: false,
+  landslide: false,
 };
 
-const MASK_ORDER = Object.keys(MASK_META) as MaskKey[];
+const MASK_ORDER = (Object.keys(MASK_META) as MaskKey[]).filter((k) => !MASK_META[k].hidden);
 
 function buildFieldCanvas(field: FieldData): HTMLCanvasElement | null {
   const src = document.createElement('canvas');
@@ -89,7 +93,12 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
   const [mounted, setMounted] = useState(false);
   const [viewState, setViewState] = useState<ViewState>({ ...HOME });
   const [maskOn, setMaskOn] = useState<Record<MaskKey, boolean>>({ ...DEFAULT_MASKS });
-  const [layerOn, setLayerOn] = useState<Record<BaseLayerKey, boolean>>({ buildings: true, roads: true });
+  const [scenario2050, setScenario2050] = useState(false);
+  const [layerOn, setLayerOn] = useState<Record<BaseLayerKey, boolean>>({
+    buildings: true,
+    roads: true,
+    power: true,
+  });
   const [catOn, setCatOn] = useState<Record<ActivityCategory, boolean>>({ ...ALL_CATS });
   const [topView, setTopView] = useState(false);
 
@@ -134,6 +143,16 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
     [payload.roads, project],
   );
 
+  const powerLines = useMemo<ProjectedRoad[]>(
+    () =>
+      payload.powerLines.map((d) => ({
+        width: d.width,
+        rail: false,
+        path: d.path.map((p) => project([p[0], p[1], p[2] ?? 0])),
+      })),
+    [payload.powerLines, project],
+  );
+
   const activity = useMemo<ProjectedActivity[]>(
     () =>
       payload.activity.map((d) => {
@@ -157,13 +176,13 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
     if (!mounted) return out;
     for (const key of MASK_ORDER) {
       if (!maskOn[key]) continue;
-      const field = payload.masks[key];
+      const field = payload.masks[key === 'q100' && scenario2050 ? 'q100f' : key];
       if (!field) continue;
       const canvas = buildFieldCanvas(field);
       if (canvas) out[key] = canvas;
     }
     return out;
-  }, [mounted, payload.masks, maskOn]);
+  }, [mounted, payload.masks, maskOn, scenario2050]);
 
   const layers = useMemo(() => {
     const R = payload.radius;
@@ -222,6 +241,23 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
           getPath: (d) => d.path,
           getWidth: (d) => d.width,
           getColor: (d) => (d.rail ? [92, 102, 124, 190] : [148, 158, 178, 185]),
+          widthUnits: 'meters',
+          widthMinPixels: 1.5,
+          capRounded: false,
+          jointRounded: true,
+        }),
+      );
+    }
+
+    if (layerOn.power && powerLines.length) {
+      out.push(
+        new PathLayer<ProjectedRoad>({
+          id: 'power-lines',
+          data: powerLines,
+          coordinateSystem: CART,
+          getPath: (d) => d.path,
+          getWidth: 2,
+          getColor: [248, 113, 113, 210],
           widthUnits: 'meters',
           widthMinPixels: 1.5,
           capRounded: false,
@@ -314,7 +350,7 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
     }
 
     return out;
-  }, [fieldImages, payload.radius, roads, buildings, activity, layerOn, catOn]);
+  }, [fieldImages, payload.radius, roads, powerLines, buildings, activity, layerOn, catOn]);
 
   useEffect(() => {
     const el = mapRef.current;
@@ -388,7 +424,7 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
     setCatOn((prev) => {
       const allOn = (Object.keys(prev) as ActivityCategory[]).every((c) => prev[c]);
       const next = !allOn;
-      return { nightlife: next, retail: next, venue: next, hub: next };
+      return { nightlife: next, retail: next, venue: next, hub: next, hazard: next };
     });
 
   const onToggleTopView = () =>
@@ -437,6 +473,8 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
         payload={payload}
         maskOn={maskOn}
         onToggleMask={onToggleMask}
+        scenario2050={scenario2050}
+        onToggleScenario={() => setScenario2050((v) => !v)}
         layerOn={layerOn}
         onToggleLayer={onToggleLayer}
         catOn={catOn}
