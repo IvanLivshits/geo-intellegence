@@ -34,11 +34,6 @@ function cacheKey(method: string, url: string, body: string | null): string {
   return createHash('sha1').update(`${method} ${url} ${body || ''}`).digest('hex');
 }
 
-let cacheEnabled = true;
-export function setCacheEnabled(v: boolean): void {
-  cacheEnabled = v;
-}
-
 export interface FetchOptions {
   method?: string;
   body?: string | null;
@@ -64,12 +59,10 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
   const key = cacheKey(method, opts.cacheKeyUrl ?? url, body);
   const host = new URL(url).host;
 
-  if (cacheEnabled) {
-    const cached = await cacheGet<unknown>(`http:${key}`);
-    if (cached != null) {
-      console.log(`[сеть] кэш ✓ ${host}`);
-      return cached;
-    }
+  const cached = await cacheGet<unknown>(`http:${key}`);
+  if (cached != null) {
+    console.log(`[сеть] кэш ✓ ${host}`);
+    return cached;
   }
 
   let lastErr: unknown;
@@ -100,7 +93,7 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
       }
       const data = json ? await res.json() : await res.text();
       console.log(`[сеть] ✓ ${host} · ${Date.now() - started} мс`);
-      if (cacheEnabled) await cacheSet(`http:${key}`, data, ttlMs);
+      await cacheSet(`http:${key}`, data, ttlMs);
       return data;
     } catch (err) {
       lastErr = err;

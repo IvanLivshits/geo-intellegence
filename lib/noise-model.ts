@@ -1,6 +1,4 @@
-import { haversine } from './geo';
-
-export { RADIUS } from './constants';
+import { haversine } from './geo-math';
 
 export interface OsmGeometryPoint {
   lat: number;

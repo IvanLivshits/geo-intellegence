@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import { writeFile } from 'node:fs/promises';
 import { geocode } from './lib/geo';
 import { computeScan } from './lib/scan';
+import { RADIUS } from './lib/constants';
 
 async function main() {
   const { values, positionals } = parseArgs({
@@ -9,7 +10,7 @@ async function main() {
     options: {
       lat: { type: 'string' },
       lon: { type: 'string' },
-      radius: { type: 'string', default: '500' },
+      radius: { type: 'string', default: String(RADIUS) },
       out: { type: 'string' },
     },
   });
@@ -32,14 +33,14 @@ async function main() {
   } else {
     console.error(
       'Использование:\n' +
-        '  npm run scan -- "адрес" [--radius 500] [--out payload.json]\n' +
-        '  npm run scan -- --lat=40.4168 --lon=-3.7038 [--radius 500]',
+        `  npm run scan -- "адрес" [--radius ${RADIUS}] [--out payload.json]\n` +
+        `  npm run scan -- --lat=40.4168 --lon=-3.7038 [--radius ${RADIUS}]`,
     );
     process.exit(1);
     return;
   }
 
-  const radius = parseInt(values.radius ?? '500', 10) || 500;
+  const radius = parseInt(values.radius ?? '', 10) || RADIUS;
   const t0 = Date.now();
   const payload = await computeScan({ lat, lon, radius, label });
   const m = payload.masks;

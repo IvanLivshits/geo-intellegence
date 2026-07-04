@@ -1,16 +1,11 @@
-import { haversine, metresToDegLat, metresToDegLon } from '@/lib/geo';
+import { gridCells, haversine, metresToDegLat, metresToDegLon } from '@/lib/geo-math';
 import { overpass } from '@/lib/http';
 import { computeOvertureWater } from '@/lib/overture';
 import { sampleElevations, type DemPoint } from '@/lib/dem';
-import { fieldFromValues, type MaskField } from '@/lib/mask-field';
-import { FLOOD_RAMP, RADIUS } from '@/lib/constants';
-
-export interface ComputeFloodInput {
-  lat: number;
-  lon: number;
-  radius?: number;
-  gridN?: number;
-}
+import { makeField, type MaskField } from '@/lib/mask-field';
+import { clipToZone, properCross } from '@/lib/polygon';
+import { FLOOD_RAMP } from '@/lib/constants';
+import type { MaskContext } from '@/lib/masks';
 
 interface OverpassGeomPoint {
   lat: number;
@@ -33,17 +28,6 @@ const DEFENSE_BARRIER = new Set(['flood_wall', 'flood_barrier']);
 type LonLat = [number, number];
 type Segment = [LonLat, LonLat];
 
-function orient(a: LonLat, b: LonLat, c: LonLat): number {
-  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
-}
-
-function segmentsCross(a: LonLat, b: LonLat, c: LonLat, d: LonLat): boolean {
-  const o1 = orient(a, b, c);
-  const o2 = orient(a, b, d);
-  const o3 = orient(c, d, a);
-  const o4 = orient(c, d, b);
-  return o1 * o2 < 0 && o3 * o4 < 0;
-}
 const WATER_MIN_AREA_M2 = 100000;
 const DECORATIVE_WATER = new Set([
   'pond',
@@ -162,19 +146,11 @@ async function fetchWaterPoints(
   return { points: sampledPoints, sampled: true, failed, defenses, pumps };
 }
 
-export async function computeFloodMask(input: ComputeFloodInput): Promise<MaskField> {
-  const { lat, lon, radius = RADIUS, gridN = 48 } = input;
-  const n = gridN;
-  const cellM = (radius * 2) / n;
+export async function computeFloodMask(ctx: MaskContext): Promise<MaskField> {
+  const { lat, lon, radius } = ctx;
+  const n = 48;
 
-  const cells: DemPoint[] = [];
-  for (let r = 0; r < n; r++) {
-    for (let c = 0; c < n; c++) {
-      const dy = -radius + cellM * (r + 0.5);
-      const dx = -radius + cellM * (c + 0.5);
-      cells.push({ lat: lat - metresToDegLat(dy), lon: lon + metresToDegLon(dx, lat) });
-    }
-  }
+  const cells = gridCells(lat, lon, radius, n);
 
   let waterRes = await fetchWaterPoints(lat, lon, radius * 2.5);
   if (waterRes.failed) {
@@ -222,7 +198,7 @@ export async function computeFloodMask(input: ComputeFloodInput): Promise<MaskFi
     if (risk > 0 && waterRes.defenses.length) {
       const cellPt: LonLat = [cells[i].lon, cells[i].lat];
       for (const [a, b] of waterRes.defenses) {
-        if (segmentsCross(cellPt, bestPt, a, b)) {
+        if (properCross(cellPt, bestPt, a, b)) {
           risk *= PROTECTION_FACTOR;
           protectedCells++;
           break;
@@ -231,8 +207,6 @@ export async function computeFloodMask(input: ComputeFloodInput): Promise<MaskFi
     }
     values[i] = risk;
   }
-
-  const stats = fieldFromValues(values, n, FLOOD_RAMP, 0, 100, 0, 210);
 
   const missing = cellElevs.filter((e) => e == null).length;
   const baseNote = water.length
@@ -255,14 +229,14 @@ export async function computeFloodMask(input: ComputeFloodInput): Promise<MaskFi
     note = `⚠ Поле НЕПОЛНОЕ: высоты получены для ${n * n - missing} из ${n * n} ячеек (${pct}% пропущено). Перестройте позже. ${note}`;
   }
 
-  return {
-    n,
-    rgba: stats.rgba,
-    avg: stats.avg,
-    min: stats.min,
-    max: stats.max,
+  return makeField(clipToZone(values, n, radius, ctx.zone), n, {
+    ramp: FLOOD_RAMP,
+    lo: 0,
+    hi: 100,
+    alphaMin: 0,
+    alphaMax: 210,
     unit: '%',
     label: 'Риск разлива рек (модель)',
     note,
-  };
+  });
 }

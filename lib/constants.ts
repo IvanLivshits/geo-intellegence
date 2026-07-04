@@ -1,4 +1,7 @@
-export const RADIUS = 500;
+export const RADIUS = 400;
+export const RADIUS_MIN = 200;
+export const RADIUS_MAX = 1000;
+export const ZONE_HALF_MAX = 1200;
 
 export const DB_LOW = 45;
 export const DB_HIGH = 75;
@@ -85,13 +88,13 @@ export interface MaskMeta {
 
 export const MASK_META: Record<MaskKey, MaskMeta> = {
   noise: { key: 'noise', label: 'Шум', ramp: RAMP, lowLabel: 'тихо', highLabel: 'громко' },
-  air: { key: 'air', label: 'Качество воздуха', ramp: AIR_RAMP, lowLabel: 'чистый', highLabel: 'грязный' },
-  flood: { key: 'flood', label: 'Риск разлива рек', ramp: FLOOD_RAMP, lowLabel: 'сухо', highLabel: 'зальёт' },
-  q100: { key: 'q100', label: 'Прогноз наводнений', ramp: Q100_RAMP, lowLabel: 'мелко', highLabel: 'глубоко' },
-  q100f: { key: 'q100f', label: 'Прогноз наводнений · 2050', ramp: Q100_RAMP, lowLabel: 'мелко', highLabel: 'глубоко', hidden: true },
-  pluvial: { key: 'pluvial', label: 'Ливневое подтопление', ramp: PLUVIAL_RAMP, lowLabel: 'стечёт', highLabel: 'застой' },
+  air: { key: 'air', label: 'Качество воздуха', ramp: AIR_RAMP, lowLabel: 'чистый воздух', highLabel: 'грязный воздух' },
+  flood: { key: 'flood', label: 'Риск разлива рек', ramp: FLOOD_RAMP, lowLabel: 'низкий риск', highLabel: 'высокий риск' },
+  q100: { key: 'q100', label: 'Прогноз наводнений', ramp: Q100_RAMP, lowLabel: 'мелкая вода', highLabel: 'глубокая вода' },
+  q100f: { key: 'q100f', label: 'Прогноз наводнений · 2050', ramp: Q100_RAMP, lowLabel: 'мелкая вода', highLabel: 'глубокая вода', hidden: true },
+  pluvial: { key: 'pluvial', label: 'Ливневое подтопление', ramp: PLUVIAL_RAMP, lowLabel: 'вода уходит', highLabel: 'вода стоит' },
   seismic: { key: 'seismic', label: 'Сейсмика', ramp: SEISMIC_RAMP, lowLabel: 'спокойно', highLabel: 'сильные толчки' },
-  landslide: { key: 'landslide', label: 'Оползни', ramp: LANDSLIDE_RAMP, lowLabel: 'ровно', highLabel: 'опасный склон' },
+  landslide: { key: 'landslide', label: 'Оползни', ramp: LANDSLIDE_RAMP, lowLabel: 'ровное место', highLabel: 'опасный склон' },
 };
 
 export type ActivityCategory = 'nightlife' | 'retail' | 'venue' | 'hub' | 'hazard';

@@ -14,6 +14,8 @@ export interface MaskContext {
   lon: number;
   radius: number;
   osmElements?: OsmElement[];
+  zone?: [number, number][];
+  zoneTag?: string;
 }
 
 type MaskCompute = (ctx: MaskContext) => Promise<MaskField>;

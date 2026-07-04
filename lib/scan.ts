@@ -1,11 +1,12 @@
-import { haversine, metresToDegLat, metresToDegLon } from './geo';
+import { createHash } from 'node:crypto';
+import { localMetres, metresToDegLat, metresToDegLon } from './geo-math';
 import { overpass } from './http';
-import { sampleElevations } from './dem';
 import type { OsmElement, OsmGeometryPoint } from './noise-model';
 import { extractActivity } from './activity-sources';
 import { computeOvertureBuildings } from './overture';
 import { computeAllMasks } from './masks';
-import { RADIUS } from './constants';
+import { RADIUS, ZONE_HALF_MAX } from './constants';
+import { ringSelfIntersects } from './polygon';
 import type { Building, Road, ScanPayload } from './types';
 
 interface Box {
@@ -137,10 +138,50 @@ export interface ScanInput {
   lon: number;
   radius?: number;
   label?: string | null;
+  polygon?: [number, number][];
+}
+
+interface ZoneGeometry {
+  lat: number;
+  lon: number;
+  radius: number;
+  zone: [number, number][];
+  zoneTag: string;
+}
+
+function zoneGeometry(polygon: [number, number][]): ZoneGeometry {
+  if (ringSelfIntersects(polygon)) {
+    throw new Error('Контур зоны пересекает сам себя — обведите заново без пересечений');
+  }
+  const lats = polygon.map((p) => p[0]);
+  const lons = polygon.map((p) => p[1]);
+  const lat = (Math.min(...lats) + Math.max(...lats)) / 2;
+  const lon = (Math.min(...lons) + Math.max(...lons)) / 2;
+  const [halfW, halfH] = localMetres(lat, lon, Math.max(...lats), Math.max(...lons));
+  const half = Math.max(halfW, halfH);
+  if (half > ZONE_HALF_MAX) {
+    const side = half * 2;
+    const sideText = side >= 10000 ? `~${Math.round(side / 1000)} км` : `~${Math.round(side)} м`;
+    throw new Error(
+      `Зона слишком большая: ${sideText} по стороне, максимум ${(ZONE_HALF_MAX * 2) / 1000} км — приблизьте карту и обведите участок компактнее`,
+    );
+  }
+  const radius = Math.max(250, Math.ceil(half * 1.15));
+  const zone: [number, number][] = polygon.map(([la, lo]) => localMetres(lat, lon, la, lo));
+  const zoneTag = createHash('sha1')
+    .update(polygon.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join(';'))
+    .digest('hex')
+    .slice(0, 12);
+  return { lat, lon, radius, zone, zoneTag };
 }
 
 export async function computeScan(input: ScanInput): Promise<ScanPayload> {
-  const { lat, lon, radius = RADIUS, label = null } = input;
+  const label = input.label ?? null;
+  const zoneGeo =
+    input.polygon && input.polygon.length >= 3 ? zoneGeometry(input.polygon) : null;
+  const lat = zoneGeo ? zoneGeo.lat : input.lat;
+  const lon = zoneGeo ? zoneGeo.lon : input.lon;
+  const radius = zoneGeo ? zoneGeo.radius : input.radius ?? RADIUS;
 
   const box: Box = {
     xmin: lon - metresToDegLon(radius, lat),
@@ -179,7 +220,14 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
   const els: OsmElement[] = res.elements || [];
   console.log(`[карта] OSM получен · элементов: ${els.length}`);
 
-  const masksPromise = computeAllMasks({ lat, lon, radius, osmElements: els });
+  const masksPromise = computeAllMasks({
+    lat,
+    lon,
+    radius,
+    osmElements: els,
+    zone: zoneGeo?.zone,
+    zoneTag: zoneGeo?.zoneTag,
+  });
 
   const osmBuildings: Building[] = [];
   const sourceEls: OsmElement[] = [];
@@ -230,15 +278,7 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
 
   const activity = extractActivity(els, lat, lon, radius);
 
-  const elevationPromise = sampleElevations([{ lat, lon }])
-    .then((e) => e[0])
-    .catch(() => null);
-
-  const [overture, masks, elevation] = await Promise.all([
-    overturePromise,
-    masksPromise,
-    elevationPromise,
-  ]);
+  const [overture, masks] = await Promise.all([overturePromise, masksPromise]);
   const buildings =
     overture && overture.buildings.length > osmBuildings.length ? overture.buildings : osmBuildings;
   const buildingsSource = buildings === osmBuildings ? 'OSM' : 'Overture';
@@ -246,30 +286,17 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
     `[карта] застройка: ${buildingsSource} ${buildings.length} (OSM ${osmBuildings.length}) · дороги/ж-д: ${roads.length} · активность: ${activity.length} · маски: шум ${masks.noise.avg ?? '—'} дБ · воздух ${masks.air.avg ?? '—'} · затопление ${masks.flood.avg ?? '—'}`,
   );
 
-  let roadsM = 0;
-  for (const r of roads) {
-    for (let i = 0; i < r.path.length - 1; i++) {
-      roadsM += haversine(r.path[i][1], r.path[i][0], r.path[i + 1][1], r.path[i + 1][0]);
-    }
-  }
-  const heights = buildings.map((b) => b.height).filter((h) => Number.isFinite(h) && h > 0);
-  const facts = {
-    elevationM: elevation != null ? Math.round(elevation) : null,
-    roadsKm: Math.round(roadsM / 100) / 10,
-    buildingHeightAvgM: heights.length
-      ? Math.round((heights.reduce((s, h) => s + h, 0) / heights.length) * 10) / 10
-      : null,
-  };
-
   return {
     center: [lon, lat],
     radius,
+    zone: input.polygon && input.polygon.length >= 3
+      ? input.polygon.map(([la, lo]): [number, number] => [lo, la])
+      : undefined,
     label,
     buildings,
     roads,
     powerLines,
     activity,
     masks,
-    facts,
   };
 }

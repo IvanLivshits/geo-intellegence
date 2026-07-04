@@ -1,8 +1,9 @@
-import { metresToDegLat, metresToDegLon } from './geo';
+import { gridCells, metresToDegLat, metresToDegLon } from './geo-math';
 import { overpass } from './http';
 import { ldenAt, type OsmElement } from './noise-model';
 import { DB_LOW, DB_HIGH, RAMP, rampColour, MASK_META } from './constants';
 import type { MaskField } from './mask-field';
+import { pointInZone } from './polygon';
 import type { MaskContext } from './masks';
 
 function isRoadSource(el: OsmElement): boolean {
@@ -33,34 +34,30 @@ export async function computeNoiseMask(ctx: MaskContext): Promise<MaskField> {
     ? ctx.osmElements.filter(isRoadSource)
     : await fetchRoadElements(lat, lon, radius);
 
-  const cellM = (radius * 2) / n;
+  const cells = gridCells(lat, lon, radius, n);
   const rgba = new Array<number>(n * n * 4).fill(0);
   const dbs: number[] = [];
   const [qr, qg, qb] = RAMP[0][1];
 
-  for (let r = 0; r < n; r++) {
-    for (let c = 0; c < n; c++) {
-      const dy = -radius + cellM * (r + 0.5);
-      const dx = -radius + cellM * (c + 0.5);
-      const clat = lat - metresToDegLat(dy);
-      const clon = lon + metresToDegLon(dx, lat);
-      const { lden } = ldenAt(clat, clon, sourceEls);
-      const i = (r * n + c) * 4;
-      if (lden == null) {
-        rgba[i] = qr;
-        rgba[i + 1] = qg;
-        rgba[i + 2] = qb;
-        rgba[i + 3] = 0;
-        continue;
-      }
-      const t = Math.max(0, Math.min(1, (lden - DB_LOW) / (DB_HIGH - DB_LOW)));
-      const [r0, g0, b0] = rampColour(t);
-      rgba[i] = r0;
-      rgba[i + 1] = g0;
-      rgba[i + 2] = b0;
-      rgba[i + 3] = Math.round(18 + 237 * Math.pow(t, 1.6));
-      dbs.push(lden);
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i];
+    const outsideZone = ctx.zone && ctx.zone.length >= 3 && !pointInZone(cell.x, cell.y, ctx.zone);
+    const { lden } = outsideZone ? { lden: null } : ldenAt(cell.lat, cell.lon, sourceEls);
+    const o = i * 4;
+    if (lden == null) {
+      rgba[o] = qr;
+      rgba[o + 1] = qg;
+      rgba[o + 2] = qb;
+      rgba[o + 3] = 0;
+      continue;
     }
+    const t = Math.max(0, Math.min(1, (lden - DB_LOW) / (DB_HIGH - DB_LOW)));
+    const [r0, g0, b0] = rampColour(t);
+    rgba[o] = r0;
+    rgba[o + 1] = g0;
+    rgba[o + 2] = b0;
+    rgba[o + 3] = Math.round(18 + 237 * Math.pow(t, 1.6));
+    dbs.push(lden);
   }
 
   console.log(`[шум] поле ${n}×${n} готово · ячеек со звуком: ${dbs.length}`);

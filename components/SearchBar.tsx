@@ -86,7 +86,7 @@ export default function SearchBar({ onSelect }: { onSelect: (point: SearchPoint)
         className="h-10 rounded-full py-0"
       />
       {open && (
-        <div className="absolute left-2 right-2 top-11 z-30 overflow-hidden border border-graphite bg-void-black">
+        <div className="absolute left-0 top-11 z-30 w-[440px] max-w-[70vw] overflow-hidden border border-graphite bg-void-black">
           {items.map((s) => (
             <button
               key={s.id}

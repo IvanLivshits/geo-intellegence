@@ -1,6 +1,7 @@
-import { metresToDegLat, metresToDegLon } from './geo';
-import { sampleElevations, type DemPoint } from './dem';
-import { fieldFromValues, type MaskField } from './mask-field';
+import { gridCells } from './geo-math';
+import { sampleElevations } from './dem';
+import { makeField, type MaskField } from './mask-field';
+import { clipToZone } from './polygon';
 import { PLUVIAL_RAMP } from './constants';
 import type { MaskContext } from './masks';
 
@@ -55,17 +56,8 @@ function fillDepressions(elevs: (number | null)[], n: number): number[] {
 export async function computePluvialMask(ctx: MaskContext): Promise<MaskField> {
   const { lat, lon, radius } = ctx;
   const n = GRID_N;
-  const cellM = (radius * 2) / n;
 
-  const cells: DemPoint[] = [];
-  for (let r = 0; r < n; r++) {
-    for (let c = 0; c < n; c++) {
-      const dy = -radius + cellM * (r + 0.5);
-      const dx = -radius + cellM * (c + 0.5);
-      cells.push({ lat: lat - metresToDegLat(dy), lon: lon + metresToDegLon(dx, lat) });
-    }
-  }
-
+  const cells = gridCells(lat, lon, radius, n);
   const elevs = await sampleElevations(cells);
   const filled = fillDepressions(elevs, n);
 
@@ -78,15 +70,14 @@ export async function computePluvialMask(ctx: MaskContext): Promise<MaskField> {
     values[i] = Math.min(pondCm, POND_MAX_CM);
   }
 
-  const stats = fieldFromValues(values, n, PLUVIAL_RAMP, 0, POND_MAX_CM, 90, 220);
-  return {
-    n,
-    rgba: stats.rgba,
-    avg: stats.avg,
-    min: stats.min,
-    max: stats.max,
+  return makeField(clipToZone(values, n, radius, ctx.zone), n, {
+    ramp: PLUVIAL_RAMP,
+    lo: 0,
+    hi: POND_MAX_CM,
+    alphaMin: 90,
+    alphaMax: 220,
     unit: 'см',
     label: 'Ливневое подтопление (модель)',
     note: NOTE,
-  };
+  });
 }

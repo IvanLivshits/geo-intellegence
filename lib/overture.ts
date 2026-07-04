@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { metresToDegLat, metresToDegLon } from '@/lib/geo';
+import { metresToDegLat, metresToDegLon } from '@/lib/geo-math';
 import { cacheGet, cacheSet } from '@/lib/cache';
 import type { Building } from '@/lib/types';
 

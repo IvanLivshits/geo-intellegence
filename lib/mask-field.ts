@@ -11,7 +11,7 @@ export interface MaskField {
   note: string;
 }
 
-export interface FieldStats {
+interface FieldStats {
   rgba: number[];
   avg: number | null;
   min: number | null;
@@ -55,5 +55,30 @@ export function fieldFromValues(
     avg: nums.length ? Math.round(nums.reduce((s, x) => s + x, 0) / nums.length) : null,
     min: nums.length ? Math.round(Math.min(...nums)) : null,
     max: nums.length ? Math.round(Math.max(...nums)) : null,
+  };
+}
+
+export interface FieldSpec {
+  ramp: RampStop[];
+  lo: number;
+  hi: number;
+  alphaMin: number;
+  alphaMax: number;
+  unit: string;
+  label: string;
+  note: string;
+}
+
+export function makeField(values: (number | null)[], n: number, spec: FieldSpec): MaskField {
+  const stats = fieldFromValues(values, n, spec.ramp, spec.lo, spec.hi, spec.alphaMin, spec.alphaMax);
+  return {
+    n,
+    rgba: stats.rgba,
+    avg: stats.avg,
+    min: stats.min,
+    max: stats.max,
+    unit: spec.unit,
+    label: spec.label,
+    note: spec.note,
   };
 }

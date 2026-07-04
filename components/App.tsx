@@ -2,26 +2,43 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { ScanPayload } from '@/lib/types';
+import { RADIUS, RADIUS_MAX, RADIUS_MIN } from '@/lib/constants';
+import { edgeCrossesPath, pathSelfIntersects, ringSelfIntersects } from '@/lib/polygon';
 import SearchBar, { SearchPoint } from './SearchBar';
 import MapView from './MapView';
+import PickerMap, { type PickerPoint } from './PickerMap';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-const RADIUS_OPTIONS = [300, 500, 800, 1000];
-
-interface Selection {
-  lat: number;
-  lon: number;
-  label: string;
-}
+type PickMode = 'point' | 'zone';
 
 export default function App() {
-  const [selection, setSelection] = useState<Selection | null>(null);
-  const [radius, setRadius] = useState(500);
+  const [mode, setMode] = useState<PickMode>('point');
+  const [point, setPoint] = useState<PickerPoint | null>(null);
+  const [pointLabel, setPointLabel] = useState<string | null>(null);
+  const [zoneSize, setZoneSize] = useState(RADIUS);
+  const [verts, setVerts] = useState<[number, number][]>([]);
+  const [closed, setClosed] = useState(false);
+  const [focus, setFocus] = useState<{ lat: number; lon: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [payload, setPayload] = useState<ScanPayload | null>(null);
   const [status, setStatus] = useState<React.ReactNode>('');
+  const [toast, setToast] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const startRef = useRef(0);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 6000);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!loading) return;
@@ -33,119 +50,274 @@ export default function App() {
     return () => clearInterval(id);
   }, [loading]);
 
-  function handleSelect(point: SearchPoint) {
-    setSelection(point);
+  function handleSelect(sp: SearchPoint) {
+    setFocus({ lat: sp.lat, lon: sp.lon });
+    if (payload) setPayload(null);
+    if (mode === 'point') {
+      setPoint({ lat: sp.lat, lon: sp.lon });
+      setPointLabel(sp.label);
+      setStatus(
+        <>
+          Выбрано: <span className="text-stellar-white">{sp.label}</span> — уточните точку кликом
+          или нажмите «Построить».
+        </>,
+      );
+    } else {
+      setStatus(<>Карта наведена на «{sp.label}» — обведите свою зону кликами.</>);
+    }
+  }
+
+  function handlePickPoint(lat: number, lon: number) {
+    setPoint({ lat, lon });
+    setPointLabel(null);
     setStatus(
       <>
-        Выбрано: <span className="text-stellar-white">{point.label}</span> ·{' '}
+        Точка:{' '}
         <span className="text-stellar-white">
-          {point.lat.toFixed(5)}, {point.lon.toFixed(5)}
+          {lat.toFixed(5)}, {lon.toFixed(5)}
         </span>{' '}
-        — нажмите «Построить».
+        · зона ±{zoneSize} м — нажмите «Построить».
       </>,
     );
   }
 
-  function handleRadiusChange(next: number) {
-    setRadius(next);
-    if (selection) setStatus('Радиус изменён — нажмите «Построить», чтобы пересчитать.');
+  function handleAddVert(lat: number, lon: number) {
+    if (verts.length >= 2 && edgeCrossesPath(verts[verts.length - 1], [lat, lon], verts)) {
+      showToast('Линии зоны не должны пересекаться — поставьте точку в другом месте.');
+      return;
+    }
+    setVerts((prev) => [...prev, [lat, lon]]);
   }
 
+  function handleMovePoint(lat: number, lon: number) {
+    setPoint({ lat, lon });
+    setPointLabel(null);
+    setStatus(
+      <>
+        Точка:{' '}
+        <span className="text-stellar-white">
+          {lat.toFixed(5)}, {lon.toFixed(5)}
+        </span>{' '}
+        · зона ±{zoneSize} м — нажмите «Построить».
+      </>,
+    );
+  }
+
+  function handleMoveVert(index: number, lat: number, lon: number) {
+    setVerts((prev) => {
+      const next = prev.map((v, i): [number, number] => (i === index ? [lat, lon] : v));
+      const broken = closed ? ringSelfIntersects(next) : pathSelfIntersects(next);
+      return broken ? prev : next;
+    });
+  }
+
+  function handleCloseZone() {
+    if (ringSelfIntersects(verts)) {
+      showToast('Контур пересекает сам себя — уберите пересечение («Сбросить») и обведите заново.');
+      return;
+    }
+    setClosed(true);
+    setStatus('Зона замкнута — нажмите «Построить».');
+  }
+
+  function resetZone() {
+    setVerts([]);
+    setClosed(false);
+  }
+
+  function switchMode(next: PickMode) {
+    setMode(next);
+    setPayload(null);
+  }
+
+  const canBuild = mode === 'point' ? point != null : verts.length >= 3;
+
   async function build() {
-    if (!selection) {
-      setStatus('Сначала выберите место.');
+    if (!canBuild) {
+      setStatus(
+        mode === 'point' ? 'Сначала выберите точку на карте.' : 'Обведите зону: нужно минимум 3 точки.',
+      );
+      return;
+    }
+    if (mode === 'zone' && ringSelfIntersects(verts)) {
+      showToast('Контур зоны пересекает сам себя — нажмите «Сбросить» и обведите заново.');
       return;
     }
     setLoading(true);
     setPayload(null);
-    setStatus(
-      <>
-        <span className="text-stellar-white">
-          {selection.lat.toFixed(5)}, {selection.lon.toFixed(5)}
-        </span>{' '}
-        · радиус <span className="text-stellar-white">{radius}</span> м ·{' '}
-        <span className="text-stellar-white">{selection.label}</span>
-      </>,
-    );
-    try {
-      const url =
+    let url: string;
+    let title: string;
+    if (mode === 'point' && point) {
+      title = pointLabel || `${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`;
+      url =
         '/api/scan?lat=' +
-        selection.lat +
+        point.lat +
         '&lon=' +
-        selection.lon +
+        point.lon +
         '&radius=' +
-        radius +
+        zoneSize +
         '&label=' +
-        encodeURIComponent(selection.label);
+        encodeURIComponent(title);
+      setStatus(
+        <>
+          <span className="text-stellar-white">{title}</span> · зона ±
+          <span className="text-stellar-white">{zoneSize}</span> м
+        </>,
+      );
+    } else {
+      title = pointLabel ? `Зона · ${pointLabel}` : 'Своя зона';
+      const poly = verts.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join(';');
+      url = '/api/scan?polygon=' + encodeURIComponent(poly) + '&label=' + encodeURIComponent(title);
+      setStatus(
+        <>
+          <span className="text-stellar-white">{title}</span> ·{' '}
+          <span className="text-stellar-white">{verts.length}</span> точек
+        </>,
+      );
+    }
+    try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(await res.text());
       const data: ScanPayload = await res.json();
       setPayload(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setStatus(<>Не удалось построить карту: {message}</>);
+      showToast(message.startsWith('Ошибка') ? message : `Не удалось построить карту: ${message}`);
     } finally {
       setLoading(false);
     }
   }
 
+  const buildTitle = mode === 'point' ? pointLabel || 'выбранной точки' : 'своей зоны';
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-void-black">
-      <header className="flex h-16 flex-none items-center gap-4 border-b border-graphite px-5">
-        <div className="flex-none font-mono text-mono-badge uppercase tracking-widest text-stellar-white">
+      <header className="flex h-16 flex-none items-center border-b border-graphite px-5">
+        <div className="font-mono text-mono-badge uppercase tracking-widest text-stellar-white">
           [ GEO-INTELLIGENCE ]
-        </div>
-        <div className="mx-auto flex w-full max-w-2xl items-center gap-3">
-          <SearchBar onSelect={handleSelect} />
-          <select
-            aria-label="Радиус, м"
-            className="h-10 flex-none appearance-none rounded-full border border-graphite bg-void-black px-4 font-mono text-mono-label font-normal text-stellar-white focus:border-signal-blue focus:outline-none"
-            value={radius}
-            onChange={(event) => handleRadiusChange(parseInt(event.target.value, 10))}
-          >
-            {RADIUS_OPTIONS.map((value) => (
-              <option key={value} value={value}>
-                {value} м
-              </option>
-            ))}
-          </select>
-          <Button variant="nav" onClick={build} className="flex-none">
-            Построить ↗
-          </Button>
         </div>
       </header>
 
-      {status && (
-        <div className="flex-none border-b border-graphite px-5 py-2 font-mono text-mono-badge font-normal text-ash">
-          {status}
-        </div>
-      )}
-
       <div className="relative flex min-h-0 w-full flex-1">
-        {payload && !loading && <MapView payload={payload} />}
+        {payload && !loading && <MapView payload={payload} onBack={() => setPayload(null)} />}
+        {!payload && !loading && (
+          <>
+            <PickerMap
+              mode={mode}
+              point={point}
+              zoneSize={zoneSize}
+              verts={verts}
+              closed={closed}
+              focus={focus}
+              onPickPoint={handlePickPoint}
+              onAddVert={handleAddVert}
+              onCloseZone={handleCloseZone}
+              onMovePoint={handleMovePoint}
+              onMoveVert={handleMoveVert}
+            />
+            <div className="absolute left-4 top-4 z-10 w-80 bg-void-black/80 p-3 backdrop-blur-sm">
+              <SearchBar onSelect={handleSelect} />
+              <div className="mt-2 flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => switchMode('point')}
+                  className={cn(
+                    'h-8 flex-1 rounded-full font-mono text-mono-label uppercase tracking-wider transition-colors',
+                    mode === 'point'
+                      ? 'bg-charcoal text-stellar-white'
+                      : 'text-ash hover:text-stellar-white',
+                  )}
+                >
+                  Точка
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode('zone')}
+                  className={cn(
+                    'h-8 flex-1 rounded-full font-mono text-mono-label uppercase tracking-wider transition-colors',
+                    mode === 'zone'
+                      ? 'bg-charcoal text-stellar-white'
+                      : 'text-ash hover:text-stellar-white',
+                  )}
+                >
+                  Своя зона
+                </button>
+              </div>
+              {mode === 'point' ? (
+                <div className="px-1 py-3">
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-mono text-mono-badge uppercase tracking-wider text-ash">
+                      Зона расчёта
+                    </span>
+                    <span className="whitespace-nowrap font-mono text-mono-label text-stellar-white">
+                      ±{zoneSize} м
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={RADIUS_MIN}
+                    max={RADIUS_MAX}
+                    step={50}
+                    value={zoneSize}
+                    onChange={(e) => setZoneSize(parseInt(e.target.value, 10))}
+                    className="mt-3 w-full accent-signal-blue"
+                    aria-label="Размер зоны, м"
+                  />
+                  <div className="mt-3 font-sans text-body text-ash">
+                    Кликните точку на карте или найдите адрес — расчёт пройдёт в квадрате вокруг
+                    неё.
+                  </div>
+                </div>
+              ) : (
+                <div className="px-1 py-3">
+                  <div className="flex items-baseline justify-between">
+                    <span className="font-mono text-mono-badge uppercase tracking-wider text-ash">
+                      Точек: {verts.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={resetZone}
+                      disabled={!verts.length}
+                      className="font-mono text-mono-label text-ash enabled:hover:text-stellar-white disabled:opacity-40"
+                    >
+                      Сбросить ✕
+                    </button>
+                  </div>
+                  <div className="mt-3 font-sans text-body text-ash">
+                    {closed
+                      ? 'Зона замкнута — нажмите «Построить».'
+                      : 'Обводите участок кликами по карте (минимум 3 точки). Замкните кликом по первой — белой — точке.'}
+                  </div>
+                </div>
+              )}
+              {status && (
+                <div className="border-t border-graphite px-1 py-2.5 font-mono text-mono-badge leading-relaxed text-ash">
+                  {status}
+                </div>
+              )}
+              <Button variant="nav" onClick={build} disabled={loading || !canBuild} className="mt-1 w-full">
+                Построить ↗
+              </Button>
+            </div>
+          </>
+        )}
+        {toast && (
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="absolute bottom-6 left-1/2 z-30 max-w-[80%] -translate-x-1/2 border border-[#f87171]/70 bg-void-black/95 px-5 py-3 text-left font-mono text-mono-badge leading-relaxed text-stellar-white backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2"
+          >
+            {toast}
+          </button>
+        )}
         {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-void-black px-6 text-center text-ash">
             <div className="h-9 w-9 animate-spin rounded-full border border-graphite border-t-stellar-white" />
             <div className="font-sans text-body font-normal text-ash">
-              Считаю карту для: <span className="text-stellar-white">{selection?.label}</span> …
+              Считаю карту для: <span className="text-stellar-white">{buildTitle}</span> …
             </div>
             <div className="font-mono text-mono-badge font-normal text-ash">
-              Идёт полный анализ · {elapsed.toFixed(1)}
-            </div>
-          </div>
-        )}
-        {!payload && !loading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-void-black px-6 text-center">
-            <div className="font-mono text-mono-badge uppercase tracking-widest text-ash">
-              [ 3D-СКАНЕР РИСКОВ РАЙОНА ]
-            </div>
-            <div className="max-w-[48ch] font-sans text-heading font-normal leading-tight text-stellar-white">
-              Найдите адрес — и получите 3D-разбор района по слоям
-            </div>
-            <div className="max-w-[54ch] font-sans text-body font-normal text-ash">
-              Шум, качество воздуха и затопляемость — картами-масками; здания, дороги и источники
-              активности рядом. По открытым данным (OSM, CAMS, рельеф). Начните с поиска в строке
-              сверху.
+              Идёт полный анализ · {elapsed.toFixed(1)} с
             </div>
           </div>
         )}

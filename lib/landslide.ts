@@ -1,9 +1,11 @@
 import { fromFile } from 'geotiff';
 import { createHash } from 'node:crypto';
-import { metresToDegLat, metresToDegLon } from './geo';
+import { gridCells } from './geo-math';
 import { cacheGet, cacheSet } from './cache';
 import { ensureRaster } from './raster-cache';
-import { fieldFromValues, type MaskField } from './mask-field';
+import { sampleImageAt } from './raster';
+import { makeField, type MaskField } from './mask-field';
+import { clipToZone } from './polygon';
 import { LANDSLIDE_RAMP } from './constants';
 import type { MaskContext } from './masks';
 
@@ -21,7 +23,7 @@ export async function computeLandslideMask(ctx: MaskContext): Promise<MaskField>
 
   const key =
     'landslide:' +
-    createHash('sha1').update(`${lat.toFixed(5)},${lon.toFixed(5)},${radius}`).digest('hex');
+    createHash('sha1').update(`${lat.toFixed(5)},${lon.toFixed(5)},${radius},${ctx.zoneTag || ''}`).digest('hex');
   const cached = await cacheGet<MaskField>(key);
   if (cached != null) {
     console.log('[оползни] кэш ✓ NASA LHASA');
@@ -31,51 +33,25 @@ export async function computeLandslideMask(ctx: MaskContext): Promise<MaskField>
   const path = await ensureRaster(TIF_URL, 'nasa-landslide-susceptibility.tif');
   const tiff = await fromFile(path);
   const image = await tiff.getImage();
-  const [west, south, east, north] = image.getBoundingBox();
-  const resX = (east - west) / image.getWidth();
-  const resY = (north - south) / image.getHeight();
-  const px = (vLon: number) => Math.floor((vLon - west) / resX);
-  const py = (vLat: number) => Math.floor((north - vLat) / resY);
 
-  const cellM = (radius * 2) / n;
-  const x0 = Math.max(0, px(lon - metresToDegLon(radius, lat)) - 1);
-  const x1 = Math.min(image.getWidth() - 1, px(lon + metresToDegLon(radius, lat)) + 1);
-  const y0 = Math.max(0, py(lat + metresToDegLat(radius)) - 1);
-  const y1 = Math.min(image.getHeight() - 1, py(lat - metresToDegLat(radius)) + 1);
+  const cells = gridCells(lat, lon, radius, n);
+  const raw = await sampleImageAt(image, cells);
+  const values = raw.map((v) => {
+    if (v == null || v < 1 || v > 5) return null;
+    const pct = ((v - 1) / 4) * 100;
+    return pct > 0 ? pct : null;
+  });
 
-  const values: (number | null)[] = new Array(n * n).fill(null);
-  if (x1 >= x0 && y1 >= y0) {
-    const rasters = await image.readRasters({ window: [x0, y0, x1 + 1, y1 + 1] });
-    const band = rasters[0];
-    if (typeof band !== 'number' && band) {
-      const width = x1 + 1 - x0;
-      for (let r = 0; r < n; r++) {
-        for (let c = 0; c < n; c++) {
-          const dy = -radius + cellM * (r + 0.5);
-          const dx = -radius + cellM * (c + 0.5);
-          const ix = px(lon + metresToDegLon(dx, lat)) - x0;
-          const iy = py(lat - metresToDegLat(dy)) - y0;
-          if (ix < 0 || iy < 0 || ix >= width) continue;
-          const v = (band as ArrayLike<number>)[iy * width + ix];
-          if (!Number.isFinite(v) || v < 1 || v > 5) continue;
-          const pct = ((v - 1) / 4) * 100;
-          values[r * n + c] = pct > 0 ? pct : null;
-        }
-      }
-    }
-  }
-
-  const stats = fieldFromValues(values, n, LANDSLIDE_RAMP, 0, 100, 20, 220);
-  const result: MaskField = {
-    n,
-    rgba: stats.rgba,
-    avg: stats.avg,
-    min: stats.min,
-    max: stats.max,
+  const result = makeField(clipToZone(values, n, radius, ctx.zone), n, {
+    ramp: LANDSLIDE_RAMP,
+    lo: 0,
+    hi: 100,
+    alphaMin: 20,
+    alphaMax: 220,
     unit: '%',
     label: 'Оползни · NASA LHASA',
     note: NOTE,
-  };
+  });
   await cacheSet(key, result, CACHE_TTL_MS);
   return result;
 }

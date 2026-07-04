@@ -5,8 +5,11 @@ import DeckGL from '@deck.gl/react';
 import { OrbitView, COORDINATE_SYSTEM, type Layer } from '@deck.gl/core';
 import { BitmapLayer, PolygonLayer, PathLayer, ScatterplotLayer } from '@deck.gl/layers';
 import type { ScanPayload } from '@/lib/types';
-import { MASK_META, type ActivityCategory, type MaskKey } from '@/lib/constants';
-import InspectorPanel, { type BaseLayerKey } from './InspectorPanel';
+import { type ActivityCategory, type MaskKey } from '@/lib/constants';
+import { localMetres } from '@/lib/geo-math';
+import InspectorPanel from './InspectorPanel';
+import LayersPanel, { type BaseLayerKey } from './LayersPanel';
+import { cn } from '@/lib/utils';
 
 interface ViewState {
   target: [number, number, number];
@@ -54,20 +57,7 @@ const ALL_CATS: Record<ActivityCategory, boolean> = {
   hazard: false,
 };
 
-const DEFAULT_MASKS: Record<MaskKey, boolean> = {
-  noise: true,
-  air: false,
-  flood: false,
-  q100: false,
-  q100f: false,
-  pluvial: false,
-  seismic: false,
-  landslide: false,
-};
-
-const MASK_ORDER = (Object.keys(MASK_META) as MaskKey[]).filter((k) => !MASK_META[k].hidden);
-
-function buildFieldCanvas(field: FieldData): HTMLCanvasElement | null {
+function buildFieldCanvas(field: FieldData, clipNorm?: [number, number][]): HTMLCanvasElement | null {
   const src = document.createElement('canvas');
   src.width = field.n;
   src.height = field.n;
@@ -83,16 +73,25 @@ function buildFieldCanvas(field: FieldData): HTMLCanvasElement | null {
   out.height = dim;
   const fctx = out.getContext('2d');
   if (!fctx) return null;
+  if (clipNorm && clipNorm.length >= 3) {
+    fctx.beginPath();
+    clipNorm.forEach(([u, v], i) => {
+      if (i === 0) fctx.moveTo(u * dim, v * dim);
+      else fctx.lineTo(u * dim, v * dim);
+    });
+    fctx.closePath();
+    fctx.clip();
+  }
   fctx.imageSmoothingEnabled = true;
   fctx.filter = `blur(${SCALE * 0.9}px)`;
   fctx.drawImage(src, 0, 0, dim, dim);
   return out;
 }
 
-export default function MapView({ payload }: { payload: ScanPayload }) {
+export default function MapView({ payload, onBack }: { payload: ScanPayload; onBack: () => void }) {
   const [mounted, setMounted] = useState(false);
   const [viewState, setViewState] = useState<ViewState>({ ...HOME });
-  const [maskOn, setMaskOn] = useState<Record<MaskKey, boolean>>({ ...DEFAULT_MASKS });
+  const [activeMask, setActiveMask] = useState<MaskKey | null>('noise');
   const [scenario2050, setScenario2050] = useState(false);
   const [layerOn, setLayerOn] = useState<Record<BaseLayerKey, boolean>>({
     buildings: true,
@@ -111,15 +110,13 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    setMaskOn({ ...DEFAULT_MASKS });
+    setActiveMask('noise');
   }, [payload.center, payload.radius]);
 
   const project = useMemo(() => {
     const [clon, clat] = payload.center;
-    const cosLat = Math.cos((clat * Math.PI) / 180);
     return ([lon, lat, z = 0]: [number, number, number?]): [number, number, number] => [
-      (lon - clon) * 111320 * cosLat,
-      (lat - clat) * 111320,
+      ...localMetres(clat, clon, lat, lon),
       z,
     ];
   }, [payload.center]);
@@ -171,18 +168,21 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
     [payload.activity, project],
   );
 
-  const fieldImages = useMemo(() => {
-    const out: Partial<Record<MaskKey, HTMLCanvasElement>> = {};
-    if (!mounted) return out;
-    for (const key of MASK_ORDER) {
-      if (!maskOn[key]) continue;
-      const field = payload.masks[key === 'q100' && scenario2050 ? 'q100f' : key];
-      if (!field) continue;
-      const canvas = buildFieldCanvas(field);
-      if (canvas) out[key] = canvas;
-    }
-    return out;
-  }, [mounted, payload.masks, maskOn, scenario2050]);
+  const zoneLocal = useMemo<[number, number, number][] | null>(
+    () => (payload.zone ? payload.zone.map((p) => project([p[0], p[1], 2])) : null),
+    [payload.zone, project],
+  );
+
+  const fieldImage = useMemo(() => {
+    if (!mounted || !activeMask) return null;
+    const field = payload.masks[activeMask === 'q100' && scenario2050 ? 'q100f' : activeMask];
+    if (!field) return null;
+    const R = payload.radius;
+    const clipNorm = zoneLocal
+      ? zoneLocal.map(([x, y]): [number, number] => [(x + R) / (2 * R), (R - y) / (2 * R)])
+      : undefined;
+    return buildFieldCanvas(field, clipNorm);
+  }, [mounted, payload.masks, payload.radius, zoneLocal, activeMask, scenario2050]);
 
   const layers = useMemo(() => {
     const R = payload.radius;
@@ -212,14 +212,12 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
       }),
     );
 
-    for (const key of MASK_ORDER) {
-      const image = fieldImages[key];
-      if (!image) continue;
+    if (fieldImage) {
       out.push(
         new BitmapLayer({
-          id: `field-${key}`,
+          id: 'field-active',
           coordinateSystem: CART,
-          image,
+          image: fieldImage,
           bounds: [-R, -R, R, R],
           textureParameters: {
             minFilter: 'linear',
@@ -228,6 +226,23 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
             addressModeV: 'clamp-to-edge',
           },
           pickable: false,
+        }),
+      );
+    }
+
+    if (zoneLocal && zoneLocal.length >= 3) {
+      out.push(
+        new PathLayer<{ path: [number, number, number][] }>({
+          id: 'zone-outline',
+          data: [{ path: [...zoneLocal, zoneLocal[0]] }],
+          coordinateSystem: CART,
+          getPath: (d) => d.path,
+          getColor: [37, 99, 235, 235],
+          getWidth: 2,
+          widthUnits: 'pixels',
+          widthMinPixels: 2,
+          jointRounded: true,
+          parameters: { depthTest: false } as Record<string, unknown>,
         }),
       );
     }
@@ -283,21 +298,23 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
       );
     }
 
-    out.push(
-      new ScatterplotLayer<{ p: [number, number, number] }>({
-        id: 'anchor',
-        data: [{ p: [0, 0, 0.5] }],
-        coordinateSystem: CART,
-        getPosition: (d) => d.p,
-        getRadius: 5,
-        radiusUnits: 'pixels',
-        getFillColor: [229, 101, 75, 255],
-        getLineColor: [255, 255, 255, 255],
-        stroked: true,
-        lineWidthMinPixels: 2,
-        parameters: { depthTest: false } as Record<string, unknown>,
-      }),
-    );
+    if (!zoneLocal) {
+      out.push(
+        new ScatterplotLayer<{ p: [number, number, number] }>({
+          id: 'anchor',
+          data: [{ p: [0, 0, 0.5] }],
+          coordinateSystem: CART,
+          getPosition: (d) => d.p,
+          getRadius: 5,
+          radiusUnits: 'pixels',
+          getFillColor: [229, 101, 75, 255],
+          getLineColor: [255, 255, 255, 255],
+          stroked: true,
+          lineWidthMinPixels: 2,
+          parameters: { depthTest: false } as Record<string, unknown>,
+        }),
+      );
+    }
 
     const shownActivity = activity.filter((a) => catOn[a.category]);
     if (shownActivity.length) {
@@ -350,7 +367,7 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
     }
 
     return out;
-  }, [fieldImages, payload.radius, roads, powerLines, buildings, activity, layerOn, catOn]);
+  }, [fieldImage, payload.radius, zoneLocal, roads, powerLines, buildings, activity, layerOn, catOn]);
 
   useEffect(() => {
     const el = mapRef.current;
@@ -359,6 +376,7 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
     let drag: { mode: 'orbit' | 'pan'; x: number; y: number } | null = null;
 
     const onMouseDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest?.('[data-overlay]')) return;
       if (e.button === 1 && !topRef.current) {
         drag = { mode: 'orbit', x: e.clientX, y: e.clientY };
         e.preventDefault();
@@ -398,6 +416,7 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
     };
 
     const onWheel = (e: WheelEvent) => {
+      if ((e.target as HTMLElement).closest?.('[data-overlay]')) return;
       e.preventDefault();
       const vs = viewRef.current;
       setViewState({ ...vs, zoom: clamp(vs.zoom - e.deltaY * 0.0016, -3, 4) });
@@ -436,7 +455,7 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
       return next;
     });
 
-  const onToggleMask = (key: MaskKey) => setMaskOn((prev) => ({ ...prev, [key]: !prev[key] }));
+  const onSelectMask = (key: MaskKey) => setActiveMask((prev) => (prev === key ? null : key));
 
   return (
     <div className="flex h-full w-full flex-row gap-3 p-3">
@@ -468,20 +487,36 @@ export default function MapView({ payload }: { payload: ScanPayload }) {
             }
           />
         )}
+        <LayersPanel
+          payload={payload}
+          layerOn={layerOn}
+          onToggleLayer={onToggleLayer}
+          catOn={catOn}
+          onToggleCat={onToggleCat}
+          onToggleActivityAll={onToggleActivityAll}
+          onBack={onBack}
+        />
+        <button
+          type="button"
+          data-overlay
+          onClick={onToggleTopView}
+          title="Вид сверху · 2D"
+          className={cn(
+            'absolute bottom-3 left-3 z-10 h-8 rounded-full px-4 font-mono text-mono-badge backdrop-blur-sm transition-colors',
+            topView
+              ? 'bg-charcoal text-stellar-white'
+              : 'bg-void-black/80 text-ash hover:text-stellar-white',
+          )}
+        >
+          2D
+        </button>
       </div>
       <InspectorPanel
         payload={payload}
-        maskOn={maskOn}
-        onToggleMask={onToggleMask}
+        activeMask={activeMask}
+        onSelectMask={onSelectMask}
         scenario2050={scenario2050}
         onToggleScenario={() => setScenario2050((v) => !v)}
-        layerOn={layerOn}
-        onToggleLayer={onToggleLayer}
-        catOn={catOn}
-        onToggleCat={onToggleCat}
-        onToggleActivityAll={onToggleActivityAll}
-        topView={topView}
-        onToggleTopView={onToggleTopView}
       />
     </div>
   );

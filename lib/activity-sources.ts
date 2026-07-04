@@ -1,4 +1,4 @@
-import { haversine } from './geo';
+import { haversine } from './geo-math';
 import { ACTIVITY_CATEGORIES, type ActivityCategory } from './constants';
 import type { ActivitySource } from './types';
 import type { OsmElement } from './noise-model';
