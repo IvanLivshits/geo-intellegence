@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import DeckGL from '@deck.gl/react';
 import { MapView, type Layer, type PickingInfo } from '@deck.gl/core';
 import { TileLayer } from '@deck.gl/geo-layers';
-import { BitmapLayer, PathLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers';
-import { metresToDegLat, metresToDegLon } from '@/lib/geo-math';
+import { BitmapLayer, PathLayer, PolygonLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers';
+import { haversine, metresToDegLat, metresToDegLon } from '@/lib/geo-math';
 
 export interface PickerPoint {
   lat: number;
@@ -204,6 +204,32 @@ export default function PickerMap({
           }),
         );
       }
+      const pairs: [[number, number], [number, number]][] = closed
+        ? verts.map((v, i) => [v, verts[(i + 1) % verts.length]] as [[number, number], [number, number]])
+        : verts.slice(0, -1).map((v, i) => [v, verts[i + 1]] as [[number, number], [number, number]]);
+      const edges = pairs.map(([a, b]) => ({
+        mid: [(a[1] + b[1]) / 2, (a[0] + b[0]) / 2] as [number, number],
+        len: haversine(a[0], a[1], b[0], b[1]),
+      }));
+      if (edges.length) {
+        out.push(
+          new TextLayer<{ mid: [number, number]; len: number }>({
+            id: 'edge-labels',
+            data: edges,
+            getPosition: (d) => d.mid,
+            getText: (d) => `${Math.round(d.len)} м`,
+            getSize: 12,
+            sizeUnits: 'pixels',
+            getColor: [214, 218, 226, 240],
+            background: true,
+            getBackgroundColor: [12, 12, 11, 190],
+            backgroundPadding: [4, 2, 4, 2],
+            fontFamily: 'monospace',
+            characterSet: '0123456789 м',
+            pickable: false,
+          }),
+        );
+      }
       out.push(
         new ScatterplotLayer<{ p: [number, number]; first: boolean }>({
           id: 'draw-verts',
@@ -235,6 +261,7 @@ export default function PickerMap({
           onViewStateChange={({ viewState: vs }) => setViewState(vs as unknown as PickerViewState)}
           controller={{ dragRotate: false, touchRotate: false, doubleClickZoom: false, dragPan: !grab }}
           layers={layers}
+          pickingRadius={10}
           onClick={handleClick}
           onHover={handleHover}
           onDragStart={handleDragStart}

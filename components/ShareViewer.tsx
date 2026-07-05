@@ -1,0 +1,86 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import type { ScanPayload, ShareMeta } from '@/lib/types';
+import MapView from './MapView';
+
+export default function ShareViewer({ meta, payloadUrl }: { meta: ShareMeta; payloadUrl: string }) {
+  const [payload, setPayload] = useState<ScanPayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const apiUrl = `/api/share/${meta.id}/payload`;
+    const urls = payloadUrl === apiUrl ? [payloadUrl] : [payloadUrl, apiUrl];
+
+    (async () => {
+      let lastErr: unknown = null;
+      for (const url of urls) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data: ScanPayload = await res.json();
+          if (!cancelled) setPayload(data);
+          return;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      if (!cancelled) setError(lastErr instanceof Error ? lastErr.message : String(lastErr));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [payloadUrl, meta.id]);
+
+  const date = new Date(meta.createdAt).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-void-black">
+      <header className="flex h-16 flex-none items-center justify-between border-b border-graphite px-5">
+        <a
+          href="/"
+          className="font-mono text-mono-badge uppercase tracking-widest text-stellar-white hover:text-ash"
+        >
+          [ GEO-INTELLIGENCE ]
+        </a>
+        <div className="font-mono text-mono-badge text-ash">снимок от {date}</div>
+      </header>
+
+      <div className="relative flex min-h-0 w-full flex-1">
+        {payload && (
+          <MapView
+            payload={payload}
+            onBack={() => {
+              window.location.href = '/';
+            }}
+            backLabel="← Свой скан"
+            initial={meta.ui ?? undefined}
+          />
+        )}
+        {!payload && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-void-black px-6 text-center text-ash">
+            {error ? (
+              <div className="font-sans text-body text-ash">Не удалось загрузить снимок: {error}</div>
+            ) : (
+              <>
+                <div className="h-9 w-9 animate-spin rounded-full border border-graphite border-t-stellar-white" />
+                <div className="font-sans text-body text-ash">
+                  Загружаю снимок:{' '}
+                  <span className="text-stellar-white">
+                    {meta.label || `${meta.center[1].toFixed(4)}, ${meta.center[0].toFixed(4)}`}
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -7,9 +7,9 @@ const USER_AGENT =
 const HOST_MIN_INTERVAL: Record<string, number> = {
   'nominatim.openstreetmap.org': 1100,
   'overpass-api.de': 1500,
+  'overpass.osm.ch': 1500,
+  'maps.mail.ru': 1500,
   'overpass.kumi.systems': 1500,
-  'overpass.private.coffee': 1500,
-  'overpass.osm.jp': 1500,
   'air-quality-api.open-meteo.com': 400,
 };
 const lastCallByHost = new Map<string, number>();
@@ -107,9 +107,9 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
 
 const OVERPASS_MIRRORS = [
   'https://overpass-api.de/api/interpreter',
+  'https://overpass.osm.ch/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
-  'https://overpass.osm.jp/api/interpreter',
 ];
 
 export async function overpass(query: string, opts: FetchOptions = {}): Promise<any> {
@@ -119,16 +119,23 @@ export async function overpass(query: string, opts: FetchOptions = {}): Promise<
       body: 'data=' + encodeURIComponent(query),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       cacheKeyUrl: 'overpass',
+      retries: 0,
       ...opts,
     });
 
   let lastErr: unknown;
-  for (const url of OVERPASS_MIRRORS) {
-    try {
-      return await request(url);
-    } catch (err) {
-      lastErr = err;
-      console.warn(`[сеть] Overpass-зеркало ${new URL(url).host} не ответило — пробую следующее`);
+  for (let round = 0; round < 2; round++) {
+    if (round > 0) {
+      console.warn('[сеть] все зеркала Overpass не ответили — пауза 2 с и второй круг');
+      await sleep(2000);
+    }
+    for (const url of OVERPASS_MIRRORS) {
+      try {
+        return await request(url);
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[сеть] Overpass-зеркало ${new URL(url).host} не ответило — пробую следующее`);
+      }
     }
   }
   throw lastErr;

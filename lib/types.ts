@@ -36,6 +36,32 @@ export interface ScanPayload {
   masks: Record<MaskKey, MaskField>;
 }
 
+export interface ShareUiState {
+  activeMask?: MaskKey | null;
+  topView?: boolean;
+  scenario2050?: boolean;
+}
+
+export interface ShareInput {
+  lat?: number;
+  lon?: number;
+  radius?: number;
+  label?: string | null;
+  polygon?: [number, number][];
+}
+
+export interface ShareMeta {
+  id: string;
+  input: ShareInput;
+  label: string | null;
+  center: [number, number];
+  radius: number;
+  zone: [number, number][] | null;
+  createdAt: string;
+  ui: ShareUiState | null;
+  stats: { noise: number | null; q100: number | null; pluvial: number | null };
+}
+
 export interface GeocodeResult {
   lat: number;
   lon: number;

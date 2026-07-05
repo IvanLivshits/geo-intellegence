@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import type { ScanPayload } from '@/lib/types';
-import { RADIUS, RADIUS_MAX, RADIUS_MIN } from '@/lib/constants';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ScanPayload, ShareInput } from '@/lib/types';
+import { RADIUS, RADIUS_MAX, RADIUS_MIN, ZONE_HALF_MAX } from '@/lib/constants';
+import { localMetres } from '@/lib/geo-math';
 import { edgeCrossesPath, pathSelfIntersects, ringSelfIntersects } from '@/lib/polygon';
 import SearchBar, { SearchPoint } from './SearchBar';
 import MapView from './MapView';
@@ -11,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 type PickMode = 'point' | 'zone';
+
+const round6 = (v: number) => Number(v.toFixed(6));
 
 export default function App() {
   const [mode, setMode] = useState<PickMode>('point');
@@ -22,6 +25,7 @@ export default function App() {
   const [focus, setFocus] = useState<{ lat: number; lon: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [payload, setPayload] = useState<ScanPayload | null>(null);
+  const [scanInput, setScanInput] = useState<ShareInput | null>(null);
   const [status, setStatus] = useState<React.ReactNode>('');
   const [toast, setToast] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -130,7 +134,30 @@ export default function App() {
     setPayload(null);
   }
 
-  const canBuild = mode === 'point' ? point != null : verts.length >= 3;
+  const zoneDims = useMemo(() => {
+    if (verts.length < 2) return null;
+    const lats = verts.map((v) => v[0]);
+    const lons = verts.map((v) => v[1]);
+    const latC = (Math.min(...lats) + Math.max(...lats)) / 2;
+    const lonC = (Math.min(...lons) + Math.max(...lons)) / 2;
+    const [halfW, halfH] = localMetres(latC, lonC, Math.max(...lats), Math.max(...lons));
+    const maxSideM = Math.max(halfW, halfH) * 2;
+    let areaM2 = 0;
+    if (verts.length >= 3) {
+      const pts = verts.map(([la, lo]) => localMetres(latC, lonC, la, lo));
+      for (let i = 0; i < pts.length; i++) {
+        const [x1, y1] = pts[i];
+        const [x2, y2] = pts[(i + 1) % pts.length];
+        areaM2 += x1 * y2 - x2 * y1;
+      }
+      areaM2 = Math.abs(areaM2) / 2;
+    }
+    return { w: Math.round(halfW * 2), h: Math.round(halfH * 2), maxSideM, areaM2 };
+  }, [verts]);
+
+  const zoneTooBig = zoneDims != null && zoneDims.maxSideM > ZONE_HALF_MAX * 2 - 1;
+
+  const canBuild = mode === 'point' ? point != null : verts.length >= 3 && !zoneTooBig;
 
   async function build() {
     if (!canBuild) {
@@ -148,12 +175,15 @@ export default function App() {
     let url: string;
     let title: string;
     if (mode === 'point' && point) {
-      title = pointLabel || `${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`;
+      const lat = round6(point.lat);
+      const lon = round6(point.lon);
+      title = pointLabel || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      setScanInput({ lat, lon, radius: zoneSize, label: title });
       url =
         '/api/scan?lat=' +
-        point.lat +
+        lat +
         '&lon=' +
-        point.lon +
+        lon +
         '&radius=' +
         zoneSize +
         '&label=' +
@@ -166,7 +196,9 @@ export default function App() {
       );
     } else {
       title = pointLabel ? `Зона · ${pointLabel}` : 'Своя зона';
-      const poly = verts.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join(';');
+      const verts6 = verts.map(([la, lo]): [number, number] => [round6(la), round6(lo)]);
+      setScanInput({ polygon: verts6, label: title });
+      const poly = verts6.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join(';');
       url = '/api/scan?polygon=' + encodeURIComponent(poly) + '&label=' + encodeURIComponent(title);
       setStatus(
         <>
@@ -199,7 +231,9 @@ export default function App() {
       </header>
 
       <div className="relative flex min-h-0 w-full flex-1">
-        {payload && !loading && <MapView payload={payload} onBack={() => setPayload(null)} />}
+        {payload && !loading && (
+          <MapView payload={payload} onBack={() => setPayload(null)} scanInput={scanInput ?? undefined} />
+        )}
         {!payload && !loading && (
           <>
             <PickerMap
@@ -283,10 +317,31 @@ export default function App() {
                       Сбросить ✕
                     </button>
                   </div>
+                  {zoneDims && (
+                    <div className="mt-2 font-mono text-mono-badge text-ash">
+                      <span className={zoneTooBig ? 'text-alert-red' : 'text-stellar-white'}>
+                        {zoneDims.w} × {zoneDims.h} м
+                      </span>
+                      {zoneDims.areaM2 > 0 && (
+                        <>
+                          {' · '}
+                          {zoneDims.areaM2 >= 10000
+                            ? `${(zoneDims.areaM2 / 1e6).toFixed(2)} км²`
+                            : `${Math.round(zoneDims.areaM2)} м²`}
+                        </>
+                      )}
+                      {zoneTooBig && (
+                        <div className="mt-1 text-alert-red">
+                          больше лимита {(ZONE_HALF_MAX * 2) / 1000} × {(ZONE_HALF_MAX * 2) / 1000} км —
+                          уменьшите зону
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="mt-3 font-sans text-body text-ash">
                     {closed
-                      ? 'Зона замкнута — нажмите «Построить».'
-                      : 'Обводите участок кликами по карте (минимум 3 точки). Замкните кликом по первой — белой — точке.'}
+                      ? 'Зона замкнута — нажмите «Построить». Точки можно двигать мышью.'
+                      : 'Обводите участок кликами по карте (минимум 3 точки). Замкните кликом по первой — белой — точке. Точки можно двигать.'}
                   </div>
                 </div>
               )}
@@ -305,7 +360,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setToast(null)}
-            className="absolute bottom-6 left-1/2 z-30 max-w-[80%] -translate-x-1/2 border border-[#f87171]/70 bg-void-black/95 px-5 py-3 text-left font-mono text-mono-badge leading-relaxed text-stellar-white backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2"
+            className="absolute bottom-6 left-1/2 z-30 max-w-[80%] -translate-x-1/2 border border-alert-red/70 bg-void-black/95 px-5 py-3 text-left font-mono text-mono-badge leading-relaxed text-stellar-white backdrop-blur-sm animate-in fade-in slide-in-from-bottom-2"
           >
             {toast}
           </button>

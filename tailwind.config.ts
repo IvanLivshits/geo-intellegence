@@ -16,6 +16,7 @@ const config: Config = {
         'stellar-white': '#ffffff',
         'signal-blue': '#2563eb',
         'horizon-amber': '#ff6308',
+        'alert-red': '#f87171',
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],

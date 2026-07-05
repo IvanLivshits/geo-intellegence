@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { localMetres, metresToDegLat, metresToDegLon } from './geo-math';
+import { cacheGet, cacheSet } from './cache';
 import { overpass } from './http';
 import type { OsmElement, OsmGeometryPoint } from './noise-model';
 import { extractActivity } from './activity-sources';
@@ -175,6 +176,21 @@ function zoneGeometry(polygon: [number, number][]): ZoneGeometry {
   return { lat, lon, radius, zone, zoneTag };
 }
 
+const PAYLOAD_CACHE_TTL_MS = 3600 * 1000;
+const PAYLOAD_DEGRADED_TTL_MS = 2 * 60 * 1000;
+
+function payloadCacheKey(input: ScanInput): string {
+  const canonical =
+    input.polygon && input.polygon.length >= 3
+      ? 'poly:' + input.polygon.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join(';')
+      : `pt:${input.lat.toFixed(6)},${input.lon.toFixed(6)},${input.radius ?? RADIUS}`;
+  return 'scanres:' + createHash('sha1').update(canonical).digest('hex');
+}
+
+export function getCachedScan(input: ScanInput): Promise<ScanPayload | null> {
+  return cacheGet<ScanPayload>(payloadCacheKey(input));
+}
+
 export async function computeScan(input: ScanInput): Promise<ScanPayload> {
   const label = input.label ?? null;
   const zoneGeo =
@@ -182,6 +198,13 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
   const lat = zoneGeo ? zoneGeo.lat : input.lat;
   const lon = zoneGeo ? zoneGeo.lon : input.lon;
   const radius = zoneGeo ? zoneGeo.radius : input.radius ?? RADIUS;
+
+  const cacheKey = payloadCacheKey(input);
+  const cachedPayload = await cacheGet<ScanPayload>(cacheKey);
+  if (cachedPayload != null) {
+    console.log('[карта] кэш ✓ готовый payload');
+    return { ...cachedPayload, label };
+  }
 
   const box: Box = {
     xmin: lon - metresToDegLon(radius, lat),
@@ -278,7 +301,17 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
 
   const activity = extractActivity(els, lat, lon, radius);
 
-  const [overture, masks] = await Promise.all([overturePromise, masksPromise]);
+  let overtureTimer: ReturnType<typeof setTimeout> | undefined;
+  const overtureSoft = Promise.race([
+    overturePromise.finally(() => clearTimeout(overtureTimer)),
+    new Promise<null>((resolve) => {
+      overtureTimer = setTimeout(() => {
+        console.warn('[overture] дольше 30 с — беру OSM, Overture докачается в кэш фоном');
+        resolve(null);
+      }, 30000);
+    }),
+  ]);
+  const [overture, masks] = await Promise.all([overtureSoft, masksPromise]);
   const buildings =
     overture && overture.buildings.length > osmBuildings.length ? overture.buildings : osmBuildings;
   const buildingsSource = buildings === osmBuildings ? 'OSM' : 'Overture';
@@ -286,7 +319,7 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
     `[карта] застройка: ${buildingsSource} ${buildings.length} (OSM ${osmBuildings.length}) · дороги/ж-д: ${roads.length} · активность: ${activity.length} · маски: шум ${masks.noise.avg ?? '—'} дБ · воздух ${masks.air.avg ?? '—'} · затопление ${masks.flood.avg ?? '—'}`,
   );
 
-  return {
+  const payload: ScanPayload = {
     center: [lon, lat],
     radius,
     zone: input.polygon && input.polygon.length >= 3
@@ -299,4 +332,12 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
     activity,
     masks,
   };
+  const degraded =
+    overture == null ||
+    Object.values(masks).some((m) => m.note.startsWith('⚠') || m.note.includes('недоступн'));
+  if (degraded) {
+    console.warn('[карта] payload деградирован (фолбэки/пропуски) — кэш только на 2 мин');
+  }
+  await cacheSet(cacheKey, payload, degraded ? PAYLOAD_DEGRADED_TTL_MS : PAYLOAD_CACHE_TTL_MS);
+  return payload;
 }

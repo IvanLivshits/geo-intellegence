@@ -16,6 +16,7 @@ export interface LayersPanelProps {
   onToggleCat: (cat: ActivityCategory) => void;
   onToggleActivityAll: () => void;
   onBack: () => void;
+  backLabel?: string;
 }
 
 const rgb = (c: [number, number, number]) => `rgb(${c[0]},${c[1]},${c[2]})`;
@@ -62,6 +63,7 @@ export default function LayersPanel({
   onToggleCat,
   onToggleActivityAll,
   onBack,
+  backLabel,
 }: LayersPanelProps) {
   const [open, setOpen] = useState(true);
   const [catsOpen, setCatsOpen] = useState(false);
@@ -80,7 +82,7 @@ export default function LayersPanel({
           onClick={onBack}
           className="flex h-7 items-center px-2 font-mono text-mono-badge uppercase tracking-wider text-ash hover:text-stellar-white"
         >
-          ← Выбор зоны
+          {backLabel ?? '← Выбор зоны'}
         </button>
         <button
           type="button"
