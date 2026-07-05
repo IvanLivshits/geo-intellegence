@@ -1,37 +1,46 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { storageGet, storagePublicUrl } from '@/lib/storage';
-import type { ShareMeta } from '@/lib/types';
+import { storagePublicUrl } from '@/lib/storage';
+import { payloadKey, readShareMeta } from '@/lib/share';
 import ShareViewer from '@/components/ShareViewer';
 
 export const dynamic = 'force-dynamic';
 
-const ID_RE = /^[0-9a-f]{10}$/;
-
-async function readMeta(id: string): Promise<ShareMeta | null> {
-  if (!ID_RE.test(id)) return null;
-  const raw = await storageGet(`shares/${id}/meta.json`);
-  if (!raw) return null;
-  return JSON.parse(raw.toString('utf8')) as ShareMeta;
+function requestBase(): URL {
+  const h = headers();
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'localhost:3000';
+  const proto = h.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https');
+  return new URL(`${proto}://${host}`);
 }
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const meta = await readMeta(params.id);
+  const meta = await readShareMeta(params.id);
   if (!meta) return { title: 'Снимок не найден · Geo-Intelligence' };
   const place = meta.label || `${meta.center[1].toFixed(4)}, ${meta.center[0].toFixed(4)}`;
-  const bits: string[] = [];
-  if (meta.stats.noise != null) bits.push(`шум ${meta.stats.noise} дБ`);
-  if (meta.stats.q100 != null) bits.push(`паводок Q100 ${meta.stats.q100} см`);
-  if (meta.stats.pluvial != null) bits.push(`ливни ${meta.stats.pluvial} см`);
+  const title = `Риски района · ${place}`;
+  const description = '3D-разбор рисков района по открытым данным. Geo-Intelligence.';
+  const ogUrl = new URL(`/s/${params.id}/og`, requestBase()).toString();
   return {
-    title: `Риски района · ${place}`,
-    description: `3D-разбор рисков по открытым данным${bits.length ? ': ' + bits.join(' · ') : ''}. Geo-Intelligence.`,
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      images: [{ url: ogUrl, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [ogUrl],
+    },
   };
 }
 
 export default async function SharePage({ params }: { params: { id: string } }) {
-  const meta = await readMeta(params.id);
+  const meta = await readShareMeta(params.id);
   if (!meta) notFound();
-  const payloadUrl = storagePublicUrl(`shares/${params.id}/payload.json`) ?? `/api/share/${params.id}/payload`;
+  const payloadUrl = storagePublicUrl(payloadKey(params.id)) ?? `/api/share/${params.id}/payload`;
   return <ShareViewer meta={meta} payloadUrl={payloadUrl} />;
 }

@@ -7,6 +7,11 @@ const nextConfig = {
     '@deck.gl/layers',
     '@deck.gl/react',
   ],
+  experimental: {
+    outputFileTracingIncludes: {
+      '/s/[id]/og': ['./assets/fonts/**'],
+    },
+  },
 };
 
 export default nextConfig;

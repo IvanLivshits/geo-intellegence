@@ -332,9 +332,7 @@ export async function computeScan(input: ScanInput): Promise<ScanPayload> {
     activity,
     masks,
   };
-  const degraded =
-    overture == null ||
-    Object.values(masks).some((m) => m.note.startsWith('⚠') || m.note.includes('недоступн'));
+  const degraded = overture == null || Object.values(masks).some((m) => m.degraded);
   if (degraded) {
     console.warn('[карта] payload деградирован (фолбэки/пропуски) — кэш только на 2 мин');
   }

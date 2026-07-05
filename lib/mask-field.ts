@@ -9,6 +9,7 @@ export interface MaskField {
   unit: string;
   label: string;
   note: string;
+  degraded?: boolean;
 }
 
 interface FieldStats {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import DeckGL from '@deck.gl/react';
 import { OrbitView, COORDINATE_SYSTEM, type Layer } from '@deck.gl/core';
 import { BitmapLayer, PolygonLayer, PathLayer, ScatterplotLayer } from '@deck.gl/layers';
-import type { ScanPayload, ShareInput, ShareUiState } from '@/lib/types';
+import type { ScanPayload, ShareUiState } from '@/lib/types';
 import { type ActivityCategory, type MaskKey } from '@/lib/constants';
 import { localMetres } from '@/lib/geo-math';
 import InspectorPanel from './InspectorPanel';
@@ -93,10 +93,10 @@ export interface MapViewProps {
   onBack: () => void;
   backLabel?: string;
   initial?: ShareUiState;
-  scanInput?: ShareInput;
+  onUiChange?: (ui: ShareUiState) => void;
 }
 
-export default function MapView({ payload, onBack, backLabel, initial, scanInput }: MapViewProps) {
+export default function MapView({ payload, onBack, backLabel, initial, onUiChange }: MapViewProps) {
   const [mounted, setMounted] = useState(false);
   const [viewState, setViewState] = useState<ViewState>(
     initial?.topView ? { ...HOME, rotationX: 89, rotationOrbit: 0 } : { ...HOME },
@@ -104,8 +104,6 @@ export default function MapView({ payload, onBack, backLabel, initial, scanInput
   const [activeMask, setActiveMask] = useState<MaskKey | null>(
     initial?.activeMask !== undefined ? initial.activeMask : 'noise',
   );
-  const [shareState, setShareState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
-  const [shareError, setShareError] = useState<string | null>(null);
   const [scenario2050, setScenario2050] = useState(initial?.scenario2050 ?? false);
   const [layerOn, setLayerOn] = useState<Record<BaseLayerKey, boolean>>({
     buildings: true,
@@ -132,50 +130,9 @@ export default function MapView({ payload, onBack, backLabel, initial, scanInput
     setActiveMask('noise');
   }, [payload.center, payload.radius]);
 
-  async function handleShare() {
-    if (!scanInput || shareState === 'busy') return;
-    setShareState('busy');
-    setShareError(null);
-
-    const urlPromise = (async () => {
-      const res = await fetch('/api/share', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ input: scanInput, ui: { activeMask, topView, scenario2050 } }),
-      });
-      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
-      const { url } = await res.json();
-      return window.location.origin + url;
-    })();
-
-    try {
-      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
-        const item = new ClipboardItem({
-          'text/plain': urlPromise.then((u) => new Blob([u], { type: 'text/plain' })),
-        });
-        await navigator.clipboard.write([item]);
-        await urlPromise;
-      } else {
-        await navigator.clipboard.writeText(await urlPromise);
-      }
-      setShareState('done');
-    } catch (err) {
-      const created = await urlPromise.then(
-        (u) => u,
-        () => null,
-      );
-      const message = err instanceof Error ? err.message : String(err);
-      setShareError(
-        created
-          ? `Ссылка создана, но буфер обмена недоступен — скопируйте вручную: ${created}`
-          : message.replace(/^Ошибка:\s*/, ''),
-      );
-      setShareState('error');
-      setTimeout(() => setShareError(null), 10000);
-    } finally {
-      setTimeout(() => setShareState('idle'), 2500);
-    }
-  }
+  useEffect(() => {
+    onUiChange?.({ activeMask, topView, scenario2050 });
+  }, [activeMask, topView, scenario2050, onUiChange]);
 
   const project = useMemo(() => {
     const [clon, clat] = payload.center;
@@ -561,33 +518,6 @@ export default function MapView({ payload, onBack, backLabel, initial, scanInput
           onBack={onBack}
           backLabel={backLabel}
         />
-        {scanInput != null && (
-          <button
-            type="button"
-            data-overlay
-            onClick={handleShare}
-            disabled={shareState === 'busy'}
-            className="absolute right-3 top-3 z-10 flex h-9 items-center rounded-full border border-stellar-white bg-void-black/80 px-5 font-mono text-mono-label text-stellar-white backdrop-blur-sm transition-colors hover:border-ash hover:text-ash disabled:opacity-60"
-          >
-            {shareState === 'busy'
-              ? 'Создаю…'
-              : shareState === 'done'
-                ? 'Ссылка скопирована ✓'
-                : shareState === 'error'
-                  ? 'Ошибка — ещё раз?'
-                  : 'Поделиться ↗'}
-          </button>
-        )}
-        {shareError && (
-          <button
-            type="button"
-            data-overlay
-            onClick={() => setShareError(null)}
-            className="absolute right-3 top-14 z-10 max-w-[360px] break-words border border-alert-red/70 bg-void-black/95 px-4 py-2.5 text-left font-mono text-mono-badge leading-relaxed text-stellar-white backdrop-blur-sm"
-          >
-            {shareError}
-          </button>
-        )}
         <button
           type="button"
           data-overlay

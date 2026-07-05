@@ -41,10 +41,12 @@ export async function computeAirMask(ctx: MaskContext): Promise<MaskField> {
   };
 
   if (current == null || aqi == null || Number.isNaN(aqi)) {
-    return makeField(new Array(n * n).fill(null), n, {
+    const field = makeField(new Array(n * n).fill(null), n, {
       ...spec,
       note: 'Данные Open-Meteo Air Quality (CAMS) недоступны — значение не показано.',
     });
+    field.degraded = true;
+    return field;
   }
 
   const pm25 = roundOr(current.pm2_5, '—');

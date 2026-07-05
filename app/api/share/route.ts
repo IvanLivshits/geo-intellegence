@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { getCachedScan, type ScanInput } from '@/lib/scan';
-import { storageGet, storagePut } from '@/lib/storage';
+import { storagePut } from '@/lib/storage';
+import { metaKey, payloadKey, readShareMeta } from '@/lib/share';
 import { RADIUS, RADIUS_MAX, RADIUS_MIN } from '@/lib/constants';
 import type { ShareInput, ShareMeta, ShareUiState } from '@/lib/types';
 
@@ -52,10 +53,12 @@ function validInput(raw: ShareInput | undefined): ScanInput | null {
 }
 
 export async function POST(request: Request) {
-  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'local';
-  const last = lastShareByIp.get(ip) || 0;
-  if (Date.now() - last < RATE_WINDOW_MS) {
-    return new NextResponse('Слишком часто — подождите пару секунд', { status: 429 });
+  const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
+  if (ip) {
+    const last = lastShareByIp.get(ip) || 0;
+    if (Date.now() - last < RATE_WINDOW_MS) {
+      return new NextResponse('Слишком часто — подождите пару секунд', { status: 429 });
+    }
   }
 
   let body: ShareBody;
@@ -68,6 +71,7 @@ export async function POST(request: Request) {
   const input = validInput(body.input);
   if (!input) return new NextResponse('Некорректный input: нужны lat/lon или polygon', { status: 400 });
   const ui = body.ui ?? null;
+  const label = input.label ?? null;
 
   const day = new Date().toISOString().slice(0, 10);
   const canonical = JSON.stringify({
@@ -75,19 +79,18 @@ export async function POST(request: Request) {
     lon: input.polygon ? undefined : input.lon.toFixed(6),
     radius: input.polygon ? undefined : input.radius,
     polygon: input.polygon?.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`),
+    label,
     day,
   });
   const id = createHash('sha1').update(canonical).digest('hex').slice(0, 10);
-  const metaKey = `shares/${id}/meta.json`;
 
-  const existing = await storageGet(metaKey);
+  const existing = await readShareMeta(id);
   if (existing) {
-    const meta = JSON.parse(existing.toString('utf8')) as ShareMeta;
-    if (JSON.stringify(meta.ui) !== JSON.stringify(ui)) {
-      meta.ui = ui;
-      await storagePut(metaKey, Buffer.from(JSON.stringify(meta)), 'application/json');
+    if (JSON.stringify(existing.ui) !== JSON.stringify(ui)) {
+      existing.ui = ui;
+      await storagePut(metaKey(id), Buffer.from(JSON.stringify(existing)), 'application/json');
     }
-    markIp(ip);
+    if (ip) markIp(ip);
     return NextResponse.json({ id, url: `/s/${id}` });
   }
 
@@ -115,9 +118,9 @@ export async function POST(request: Request) {
         pluvial: payload.masks.pluvial.avg,
       },
     };
-    await storagePut(`shares/${id}/payload.json`, Buffer.from(JSON.stringify(payload)), 'application/json');
-    await storagePut(metaKey, Buffer.from(JSON.stringify(meta)), 'application/json');
-    markIp(ip);
+    await storagePut(payloadKey(id), Buffer.from(JSON.stringify(payload)), 'application/json');
+    await storagePut(metaKey(id), Buffer.from(JSON.stringify(meta)), 'application/json');
+    if (ip) markIp(ip);
     return NextResponse.json({ id, url: `/s/${id}` });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

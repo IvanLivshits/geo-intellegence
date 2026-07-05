@@ -44,6 +44,7 @@ export async function computeSeismicMask(ctx: MaskContext): Promise<MaskField> {
     label: 'Сейсмика · GEM PGA-475',
     note: pga != null ? NOTE : `Данные GEM для этой точки недоступны. ${NOTE}`,
   });
+  if (pga == null) result.degraded = true;
   await cacheSet(key, result, CACHE_TTL_MS);
   return result;
 }

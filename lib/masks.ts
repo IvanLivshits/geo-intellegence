@@ -41,6 +41,7 @@ function emptyMask(key: MaskKey): MaskField {
     unit: '',
     label: MASK_META[key].label,
     note: 'Данные временно недоступны.',
+    degraded: true,
   };
 }
 

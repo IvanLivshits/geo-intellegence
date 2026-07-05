@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ScanPayload, ShareInput } from '@/lib/types';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ScanPayload, ShareInput, ShareUiState } from '@/lib/types';
 import { RADIUS, RADIUS_MAX, RADIUS_MIN, ZONE_HALF_MAX } from '@/lib/constants';
 import { localMetres } from '@/lib/geo-math';
 import { edgeCrossesPath, pathSelfIntersects, ringSelfIntersects } from '@/lib/polygon';
@@ -28,9 +28,11 @@ export default function App() {
   const [scanInput, setScanInput] = useState<ShareInput | null>(null);
   const [status, setStatus] = useState<React.ReactNode>('');
   const [toast, setToast] = useState<string | null>(null);
+  const [shareState, setShareState] = useState<'idle' | 'busy' | 'done'>('idle');
   const [elapsed, setElapsed] = useState(0);
   const startRef = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uiRef = useRef<ShareUiState>({});
 
   function showToast(message: string) {
     setToast(message);
@@ -222,17 +224,75 @@ export default function App() {
 
   const buildTitle = mode === 'point' ? pointLabel || 'выбранной точки' : 'своей зоны';
 
+  const handleUiChange = useCallback((ui: ShareUiState) => {
+    uiRef.current = ui;
+  }, []);
+  const handleBack = useCallback(() => setPayload(null), []);
+
+  async function handleShare() {
+    if (!scanInput || shareState === 'busy') return;
+    setShareState('busy');
+
+    const urlPromise = (async () => {
+      const res = await fetch('/api/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: scanInput, ui: uiRef.current }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+      const { url } = await res.json();
+      return window.location.origin + url;
+    })();
+
+    try {
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+        const item = new ClipboardItem({
+          'text/plain': urlPromise.then((u) => new Blob([u], { type: 'text/plain' })),
+        });
+        await navigator.clipboard.write([item]).catch(async () => {
+          await navigator.clipboard.writeText(await urlPromise);
+        });
+        await urlPromise;
+      } else {
+        await navigator.clipboard.writeText(await urlPromise);
+      }
+      setShareState('done');
+      setTimeout(() => setShareState('idle'), 2500);
+    } catch (err) {
+      const created = await urlPromise.then(
+        (u) => u,
+        () => null,
+      );
+      const message = err instanceof Error ? err.message : String(err);
+      showToast(
+        created
+          ? `Ссылка создана, но буфер обмена недоступен — скопируйте вручную: ${created}`
+          : message.replace(/^Ошибка:\s*/, ''),
+      );
+      setShareState('idle');
+    }
+  }
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-void-black">
-      <header className="flex h-16 flex-none items-center border-b border-graphite px-5">
+      <header className="flex h-16 flex-none items-center justify-between border-b border-graphite px-5">
         <div className="font-mono text-mono-badge uppercase tracking-widest text-stellar-white">
           [ GEO-INTELLIGENCE ]
         </div>
+        {payload && !loading && (
+          <Button variant="nav" onClick={handleShare} disabled={shareState === 'busy'}>
+            {shareState === 'busy'
+              ? 'Создаю…'
+              : shareState === 'done'
+                ? 'Ссылка скопирована ✓'
+                : 'Поделиться ↗'}
+          </Button>
+        )}
       </header>
 
       <div className="relative flex min-h-0 w-full flex-1">
         {payload && !loading && (
-          <MapView payload={payload} onBack={() => setPayload(null)} scanInput={scanInput ?? undefined} />
+          <MapView payload={payload} onBack={handleBack} onUiChange={handleUiChange} />
         )}
         {!payload && !loading && (
           <>

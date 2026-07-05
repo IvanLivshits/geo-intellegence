@@ -229,7 +229,7 @@ export async function computeFloodMask(ctx: MaskContext): Promise<MaskField> {
     note = `⚠ Поле НЕПОЛНОЕ: высоты получены для ${n * n - missing} из ${n * n} ячеек (${pct}% пропущено). Перестройте позже. ${note}`;
   }
 
-  return makeField(clipToZone(values, n, radius, ctx.zone), n, {
+  const field = makeField(clipToZone(values, n, radius, ctx.zone), n, {
     ramp: FLOOD_RAMP,
     lo: 0,
     hi: 100,
@@ -239,4 +239,6 @@ export async function computeFloodMask(ctx: MaskContext): Promise<MaskField> {
     label: 'Риск разлива рек (модель)',
     note,
   });
+  if (waterRes.failed || missing > 0) field.degraded = true;
+  return field;
 }
