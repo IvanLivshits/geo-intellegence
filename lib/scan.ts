@@ -191,7 +191,23 @@ export function getCachedScan(input: ScanInput): Promise<ScanPayload | null> {
   return cacheGet<ScanPayload>(payloadCacheKey(input));
 }
 
-export async function computeScan(input: ScanInput): Promise<ScanPayload> {
+const inflightScans = new Map<string, Promise<ScanPayload>>();
+
+export function computeScan(input: ScanInput): Promise<ScanPayload> {
+  const cacheKey = payloadCacheKey(input);
+  const label = input.label ?? null;
+  let shared = inflightScans.get(cacheKey);
+  if (shared) {
+    console.log('[карта] расчёт уже идёт — переиспользую результат');
+  } else {
+    shared = computeScanInner(input);
+    inflightScans.set(cacheKey, shared);
+    shared.finally(() => inflightScans.delete(cacheKey)).catch(() => undefined);
+  }
+  return shared.then((payload) => ({ ...payload, label }));
+}
+
+async function computeScanInner(input: ScanInput): Promise<ScanPayload> {
   const label = input.label ?? null;
   const zoneGeo =
     input.polygon && input.polygon.length >= 3 ? zoneGeometry(input.polygon) : null;

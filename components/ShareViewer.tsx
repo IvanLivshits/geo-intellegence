@@ -3,8 +3,17 @@
 import { useEffect, useState } from 'react';
 import type { ScanPayload, ShareMeta } from '@/lib/types';
 import MapView from './MapView';
+import UserMenu, { type SessionUser } from './UserMenu';
 
-export default function ShareViewer({ meta, payloadUrl }: { meta: ShareMeta; payloadUrl: string }) {
+export default function ShareViewer({
+  meta,
+  payloadUrl,
+  user,
+}: {
+  meta: ShareMeta;
+  payloadUrl: string;
+  user: SessionUser | null;
+}) {
   const [payload, setPayload] = useState<ScanPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,7 +58,10 @@ export default function ShareViewer({ meta, payloadUrl }: { meta: ShareMeta; pay
         >
           [ GEO-INTELLIGENCE ]
         </a>
-        <div className="font-mono text-mono-badge text-ash">снимок от {date}</div>
+        <div className="flex items-center gap-4">
+          <div className="font-mono text-mono-badge text-ash">снимок от {date}</div>
+          <UserMenu user={user} />
+        </div>
       </header>
 
       <div className="relative flex min-h-0 w-full flex-1">

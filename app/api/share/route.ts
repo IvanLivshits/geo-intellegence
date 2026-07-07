@@ -1,10 +1,27 @@
-import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { getCachedScan, type ScanInput } from '@/lib/scan';
+import { auth } from '@/auth';
+import { getCachedScan } from '@/lib/scan';
 import { storagePut } from '@/lib/storage';
-import { metaKey, payloadKey, readShareMeta } from '@/lib/share';
-import { RADIUS, RADIUS_MAX, RADIUS_MIN } from '@/lib/constants';
+import { computeShareId, metaKey, payloadKey, readShareMeta, validateScanInput } from '@/lib/share';
+import { saveLocation } from '@/lib/user-store';
+import { sameOrigin } from '@/lib/csrf';
 import type { ShareInput, ShareMeta, ShareUiState } from '@/lib/types';
+
+async function saveToCabinet(userId: string, meta: ShareMeta): Promise<void> {
+  try {
+    await saveLocation(userId, {
+      shareId: meta.id,
+      label: meta.label,
+      center: meta.center,
+      radius: meta.radius,
+      stats: meta.stats,
+      input: meta.input,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`[share] не удалось сохранить локацию в кабинет: ${message}`);
+  }
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -32,27 +49,9 @@ function markIp(ip: string): void {
   lastShareByIp.set(ip, Date.now());
 }
 
-function validInput(raw: ShareInput | undefined): ScanInput | null {
-  if (!raw) return null;
-  if (Array.isArray(raw.polygon)) {
-    const polygon = raw.polygon;
-    if (polygon.length < 3 || polygon.length > 100) return null;
-    for (const p of polygon) {
-      if (!Array.isArray(p) || p.length !== 2) return null;
-      const [lat, lon] = p;
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-      if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-    }
-    return { lat: polygon[0][0], lon: polygon[0][1], polygon, label: raw.label ?? null };
-  }
-  const { lat, lon } = raw;
-  if (typeof lat !== 'number' || typeof lon !== 'number') return null;
-  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-  const radius = Math.min(RADIUS_MAX, Math.max(RADIUS_MIN, raw.radius || RADIUS));
-  return { lat, lon, radius, label: raw.label ?? null };
-}
-
 export async function POST(request: Request) {
+  if (!sameOrigin(request)) return new NextResponse('Cross-origin запрещён', { status: 403 });
+
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
   if (ip) {
     const last = lastShareByIp.get(ip) || 0;
@@ -68,21 +67,16 @@ export async function POST(request: Request) {
     return new NextResponse('Нужно JSON-тело', { status: 400 });
   }
 
-  const input = validInput(body.input);
+  const input = validateScanInput(body.input);
   if (!input) return new NextResponse('Некорректный input: нужны lat/lon или polygon', { status: 400 });
   const ui = body.ui ?? null;
   const label = input.label ?? null;
 
+  const session = await auth();
+  const userId = session?.user?.id ?? null;
+
   const day = new Date().toISOString().slice(0, 10);
-  const canonical = JSON.stringify({
-    lat: input.polygon ? undefined : input.lat.toFixed(6),
-    lon: input.polygon ? undefined : input.lon.toFixed(6),
-    radius: input.polygon ? undefined : input.radius,
-    polygon: input.polygon?.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`),
-    label,
-    day,
-  });
-  const id = createHash('sha1').update(canonical).digest('hex').slice(0, 10);
+  const id = computeShareId(input, label, day);
 
   const existing = await readShareMeta(id);
   if (existing) {
@@ -90,6 +84,7 @@ export async function POST(request: Request) {
       existing.ui = ui;
       await storagePut(metaKey(id), Buffer.from(JSON.stringify(existing)), 'application/json');
     }
+    if (userId) await saveToCabinet(userId, existing);
     if (ip) markIp(ip);
     return NextResponse.json({ id, url: `/s/${id}` });
   }
@@ -120,6 +115,7 @@ export async function POST(request: Request) {
     };
     await storagePut(payloadKey(id), Buffer.from(JSON.stringify(payload)), 'application/json');
     await storagePut(metaKey(id), Buffer.from(JSON.stringify(meta)), 'application/json');
+    if (userId) await saveToCabinet(userId, meta);
     if (ip) markIp(ip);
     return NextResponse.json({ id, url: `/s/${id}` });
   } catch (err) {

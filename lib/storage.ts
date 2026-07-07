@@ -49,6 +49,7 @@ async function r2Fetch(
   return fetch(url, {
     method,
     body,
+    cache: 'no-store',
     headers: {
       ...sendHeaders,
       authorization: `AWS4-HMAC-SHA256 Credential=${KEY_ID}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,

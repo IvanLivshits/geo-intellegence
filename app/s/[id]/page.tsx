@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { auth } from '@/auth';
 import { storagePublicUrl } from '@/lib/storage';
 import { payloadKey, readShareMeta } from '@/lib/share';
 import ShareViewer from '@/components/ShareViewer';
@@ -42,5 +43,9 @@ export default async function SharePage({ params }: { params: { id: string } }) 
   const meta = await readShareMeta(params.id);
   if (!meta) notFound();
   const payloadUrl = storagePublicUrl(payloadKey(params.id)) ?? `/api/share/${params.id}/payload`;
-  return <ShareViewer meta={meta} payloadUrl={payloadUrl} />;
+  const session = await auth();
+  const user = session?.user
+    ? { name: session.user.name ?? null, image: session.user.image ?? null }
+    : null;
+  return <ShareViewer meta={meta} payloadUrl={payloadUrl} user={user} />;
 }

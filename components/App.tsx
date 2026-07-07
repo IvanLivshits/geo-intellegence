@@ -8,6 +8,7 @@ import { edgeCrossesPath, pathSelfIntersects, ringSelfIntersects } from '@/lib/p
 import SearchBar, { SearchPoint } from './SearchBar';
 import MapView from './MapView';
 import PickerMap, { type PickerPoint } from './PickerMap';
+import UserMenu, { type SessionUser } from './UserMenu';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -15,7 +16,7 @@ type PickMode = 'point' | 'zone';
 
 const round6 = (v: number) => Number(v.toFixed(6));
 
-export default function App() {
+export default function App({ user }: { user: SessionUser | null }) {
   const [mode, setMode] = useState<PickMode>('point');
   const [point, setPoint] = useState<PickerPoint | null>(null);
   const [pointLabel, setPointLabel] = useState<string | null>(null);
@@ -26,19 +27,21 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [payload, setPayload] = useState<ScanPayload | null>(null);
   const [scanInput, setScanInput] = useState<ShareInput | null>(null);
+  const [scanTitle, setScanTitle] = useState('');
   const [status, setStatus] = useState<React.ReactNode>('');
   const [toast, setToast] = useState<string | null>(null);
   const [shareState, setShareState] = useState<'idle' | 'busy' | 'done'>('idle');
+  const [saveState, setSaveState] = useState<'idle' | 'busy' | 'done'>('idle');
   const [elapsed, setElapsed] = useState(0);
   const startRef = useRef(0);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const uiRef = useRef<ShareUiState>({});
 
-  function showToast(message: string) {
+  const showToast = useCallback((message: string) => {
     setToast(message);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 6000);
-  }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -55,6 +58,28 @@ export default function App() {
     }, 100);
     return () => clearInterval(id);
   }, [loading]);
+
+  const startScan = useCallback(
+    async (url: string, title: string, input: ShareInput) => {
+      setScanInput(input);
+      setScanTitle(title);
+      setSaveState('idle');
+      setLoading(true);
+      setPayload(null);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(await res.text());
+        const data: ScanPayload = await res.json();
+        setPayload(data);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        showToast(message.startsWith('Ошибка') ? message : `Не удалось построить карту: ${message}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [showToast],
+  );
 
   function handleSelect(sp: SearchPoint) {
     setFocus({ lat: sp.lat, lon: sp.lon });
@@ -161,7 +186,7 @@ export default function App() {
 
   const canBuild = mode === 'point' ? point != null : verts.length >= 3 && !zoneTooBig;
 
-  async function build() {
+  function build() {
     if (!canBuild) {
       setStatus(
         mode === 'point' ? 'Сначала выберите точку на карте.' : 'Обведите зону: нужно минимум 3 точки.',
@@ -172,15 +197,14 @@ export default function App() {
       showToast('Контур зоны пересекает сам себя — нажмите «Сбросить» и обведите заново.');
       return;
     }
-    setLoading(true);
-    setPayload(null);
     let url: string;
     let title: string;
+    let input: ShareInput;
     if (mode === 'point' && point) {
       const lat = round6(point.lat);
       const lon = round6(point.lon);
       title = pointLabel || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      setScanInput({ lat, lon, radius: zoneSize, label: title });
+      input = { lat, lon, radius: zoneSize, label: title };
       url =
         '/api/scan?lat=' +
         lat +
@@ -199,7 +223,7 @@ export default function App() {
     } else {
       title = pointLabel ? `Зона · ${pointLabel}` : 'Своя зона';
       const verts6 = verts.map(([la, lo]): [number, number] => [round6(la), round6(lo)]);
-      setScanInput({ polygon: verts6, label: title });
+      input = { polygon: verts6, label: title };
       const poly = verts6.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join(';');
       url = '/api/scan?polygon=' + encodeURIComponent(poly) + '&label=' + encodeURIComponent(title);
       setStatus(
@@ -209,25 +233,30 @@ export default function App() {
         </>,
       );
     }
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(await res.text());
-      const data: ScanPayload = await res.json();
-      setPayload(data);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showToast(message.startsWith('Ошибка') ? message : `Не удалось построить карту: ${message}`);
-    } finally {
-      setLoading(false);
-    }
+    startScan(url, title, input);
   }
-
-  const buildTitle = mode === 'point' ? pointLabel || 'выбранной точки' : 'своей зоны';
 
   const handleUiChange = useCallback((ui: ShareUiState) => {
     uiRef.current = ui;
   }, []);
   const handleBack = useCallback(() => setPayload(null), []);
+
+  async function handleSave() {
+    if (!scanInput || saveState !== 'idle') return;
+    setSaveState('busy');
+    try {
+      const res = await fetch('/api/me/scans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: scanInput }),
+      });
+      if (!res.ok) throw new Error((await res.text()) || `HTTP ${res.status}`);
+      setSaveState('done');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+      setSaveState('idle');
+    }
+  }
 
   async function handleShare() {
     if (!scanInput || shareState === 'busy') return;
@@ -279,15 +308,27 @@ export default function App() {
         <div className="font-mono text-mono-badge uppercase tracking-widest text-stellar-white">
           [ GEO-INTELLIGENCE ]
         </div>
-        {payload && !loading && (
-          <Button variant="nav" onClick={handleShare} disabled={shareState === 'busy'}>
-            {shareState === 'busy'
-              ? 'Создаю…'
-              : shareState === 'done'
-                ? 'Ссылка скопирована ✓'
-                : 'Поделиться ↗'}
-          </Button>
-        )}
+        <div className="flex items-center gap-4">
+          {user && scanInput && (payload || loading) && (
+            <Button variant="nav" onClick={handleSave} disabled={saveState !== 'idle'}>
+              {saveState === 'busy'
+                ? 'Сохраняю…'
+                : saveState === 'done'
+                  ? 'В кабинете ✓'
+                  : 'Сохранить'}
+            </Button>
+          )}
+          {payload && !loading && (
+            <Button variant="nav" onClick={handleShare} disabled={shareState === 'busy'}>
+              {shareState === 'busy'
+                ? 'Создаю…'
+                : shareState === 'done'
+                  ? 'Ссылка скопирована ✓'
+                  : 'Поделиться ↗'}
+            </Button>
+          )}
+          <UserMenu user={user} />
+        </div>
       </header>
 
       <div className="relative flex min-h-0 w-full flex-1">
@@ -429,7 +470,7 @@ export default function App() {
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-void-black px-6 text-center text-ash">
             <div className="h-9 w-9 animate-spin rounded-full border border-graphite border-t-stellar-white" />
             <div className="font-sans text-body font-normal text-ash">
-              Считаю карту для: <span className="text-stellar-white">{buildTitle}</span> …
+              Считаю карту для: <span className="text-stellar-white">{scanTitle}</span> …
             </div>
             <div className="font-mono text-mono-badge font-normal text-ash">
               Идёт полный анализ · {elapsed.toFixed(1)} с
