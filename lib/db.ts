@@ -72,7 +72,7 @@ export function ensureSchema(): Promise<void> {
 
 export async function query<T>(text: string, params?: unknown[]): Promise<T[]> {
   const p = getPool();
-  if (!p) throw new Error('DATABASE_URL не задан — Postgres недоступен');
+  if (!p) throw new Error('DATABASE_URL is not set — Postgres is unavailable');
   await ensureSchema();
   const res = await p.query(text, params);
   return res.rows as T[];

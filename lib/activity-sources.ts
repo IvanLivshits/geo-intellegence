@@ -10,27 +10,31 @@ interface KindSpec {
 }
 
 const KIND: Record<string, KindSpec> = {
-  nightclub: { category: 'nightlife', label: 'ночной клуб', radius: 150 },
-  bar: { category: 'nightlife', label: 'бар', radius: 80 },
-  pub: { category: 'nightlife', label: 'паб', radius: 90 },
-  mall: { category: 'retail', label: 'ТЦ', radius: 200 },
-  retail: { category: 'retail', label: 'ритейл', radius: 130 },
-  marketplace: { category: 'retail', label: 'рынок', radius: 110 },
-  stadium: { category: 'venue', label: 'стадион', radius: 350 },
-  events_venue: { category: 'venue', label: 'площадка событий', radius: 200 },
-  cinema: { category: 'venue', label: 'кинотеатр', radius: 150 },
-  theatre: { category: 'venue', label: 'театр', radius: 150 },
-  bus_station: { category: 'hub', label: 'автовокзал', radius: 150 },
-  station: { category: 'hub', label: 'станция', radius: 130 },
-  subway_entrance: { category: 'hub', label: 'вход в метро', radius: 90 },
-  tram_stop: { category: 'hub', label: 'трамвай', radius: 80 },
-  construction: { category: 'hub', label: 'стройка', radius: 200 },
-  industrial: { category: 'hub', label: 'промзона', radius: 220 },
-  fuel: { category: 'hazard', label: 'АЗС', radius: 100 },
-  storage_tank: { category: 'hazard', label: 'резервуар топлива/газа', radius: 200 },
-  aerodrome: { category: 'hazard', label: 'аэродром', radius: 1000 },
-  substation: { category: 'hazard', label: 'электроподстанция', radius: 120 },
+  nightclub: { category: 'nightlife', label: 'nightclub', radius: 150 },
+  bar: { category: 'nightlife', label: 'bar', radius: 80 },
+  pub: { category: 'nightlife', label: 'pub', radius: 90 },
+  mall: { category: 'retail', label: 'mall', radius: 200 },
+  retail: { category: 'retail', label: 'retail', radius: 130 },
+  marketplace: { category: 'retail', label: 'market', radius: 110 },
+  stadium: { category: 'venue', label: 'stadium', radius: 350 },
+  events_venue: { category: 'venue', label: 'events venue', radius: 200 },
+  cinema: { category: 'venue', label: 'cinema', radius: 150 },
+  theatre: { category: 'venue', label: 'theatre', radius: 150 },
+  bus_station: { category: 'hub', label: 'bus station', radius: 150 },
+  station: { category: 'hub', label: 'station', radius: 130 },
+  subway_entrance: { category: 'hub', label: 'subway entrance', radius: 90 },
+  tram_stop: { category: 'hub', label: 'tram stop', radius: 80 },
+  construction: { category: 'hub', label: 'construction site', radius: 200 },
+  industrial: { category: 'hub', label: 'industrial area', radius: 220 },
+  fuel: { category: 'hazard', label: 'petrol station', radius: 100 },
+  storage_tank: { category: 'hazard', label: 'fuel/gas storage tank', radius: 200 },
+  aerodrome: { category: 'hazard', label: 'aerodrome', radius: 1000 },
+  substation: { category: 'hazard', label: 'electrical substation', radius: 120 },
 };
+
+export function kindLabelOf(kind: string): string {
+  return KIND[kind]?.label ?? kind.replace(/_/g, ' ');
+}
 
 function kindOf(tags: Record<string, string> = {}): string | null {
   const a = tags.amenity;

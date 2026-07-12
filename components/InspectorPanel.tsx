@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ScanPayload } from '@/lib/types';
-import { MASK_META, type MaskKey, rampCss } from '@/lib/constants';
+import { MASK_META, displayNote, type MaskKey, rampCss } from '@/lib/constants';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
@@ -35,7 +35,7 @@ export default function InspectorPanel({
       >
         <ChevronLeft size={14} className="shrink-0" />
         <span className="font-mono text-mono-badge uppercase tracking-widest [writing-mode:vertical-rl]">
-          Инспектор
+          Inspector
         </span>
       </button>
     );
@@ -45,18 +45,18 @@ export default function InspectorPanel({
     <aside className="flex h-full w-[340px] flex-none flex-col overflow-y-auto border border-graphite bg-void-black">
       <div className="flex items-start justify-between border-b border-graphite px-5 py-4">
         <div className="min-w-0">
-          <div className="font-mono text-mono-badge uppercase text-ash">[ ИНСПЕКТОР ]</div>
+          <div className="font-mono text-mono-badge uppercase text-ash">[ INSPECTOR ]</div>
           <div className="mt-1 truncate font-sans text-body-lg text-stellar-white">
             {payload.label || `${payload.center[1].toFixed(4)}, ${payload.center[0].toFixed(4)}`}
           </div>
           <div className="mt-0.5 font-mono text-mono-badge text-ash">
-            {payload.zone ? 'своя зона' : `зона ±${payload.radius} м`}
+            {payload.zone ? 'custom zone' : `zone ±${payload.radius} m`}
           </div>
         </div>
         <button
           type="button"
           onClick={() => setCollapsed(true)}
-          aria-label="Свернуть инспектор"
+          aria-label="Collapse inspector"
           className="mt-0.5 shrink-0 text-ash hover:text-stellar-white"
         >
           <ChevronRight size={15} />
@@ -72,8 +72,8 @@ export default function InspectorPanel({
           const value =
             mask && mask.avg != null
               ? active && mask.min != null && mask.max != null
-                ? `${mask.avg} (${mask.min}–${mask.max}) ${mask.unit}`
-                : `${mask.avg} ${mask.unit}`
+                ? `${mask.avg} (${mask.min}–${mask.max}) ${MASK_META[effKey].unit}`
+                : `${mask.avg} ${MASK_META[effKey].unit}`
               : '—';
           return (
             <div key={key}>
@@ -100,7 +100,7 @@ export default function InspectorPanel({
                         ?
                       </span>
                       <div className="pointer-events-none absolute right-0 top-5 z-20 hidden w-72 border border-graphite bg-void-black p-3 font-mono text-[10px] leading-relaxed text-ash group-hover:block">
-                        {mask.note}
+                        {displayNote(effKey, mask.note)}
                       </div>
                     </div>
                   </div>
@@ -116,7 +116,7 @@ export default function InspectorPanel({
                           scenario2050 ? 'text-stellar-white' : 'text-ash',
                         )}
                       >
-                        Сценарий 2050 · клим. RCP 8.5
+                        Scenario 2050 · clim. RCP 8.5
                       </span>
                       <Switch checked={scenario2050} onCheckedChange={onToggleScenario} />
                     </div>
@@ -127,7 +127,7 @@ export default function InspectorPanel({
           );
         })}
         <div className="mt-2 px-2 font-mono text-[10px] leading-tight tracking-wider text-ash">
-          {activeMask ? 'прозрачно — всё хорошо · клик по слою выключает его' : 'клик по слою — показать на карте'}
+          {activeMask ? 'transparent — all clear · click the layer to turn it off' : 'click a layer to show it on the map'}
         </div>
       </div>
     </aside>

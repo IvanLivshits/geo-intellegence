@@ -81,10 +81,10 @@ export interface LdenResult {
 export function ldenAt(lat: number, lon: number, elements: OsmElement[]): LdenResult {
   const road = nearestByClass(elements, lat, lon, (t) => {
     if (!t.highway || ROAD_DB[t.highway] == null) return null;
-    return { ref: ROAD_DB[t.highway], kind: `дорога (${t.highway})` };
+    return { ref: ROAD_DB[t.highway], kind: `road (${t.highway})` };
   });
   const rail = nearestByClass(elements, lat, lon, (t) =>
-    t.railway === 'rail' ? { ref: RAIL_DB, kind: 'ж/д' } : null,
+    t.railway === 'rail' ? { ref: RAIL_DB, kind: 'rail' } : null,
   );
 
   const sources = [road, rail].filter(Boolean) as NearestSource[];

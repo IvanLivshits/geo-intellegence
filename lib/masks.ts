@@ -6,7 +6,6 @@ import { computeAirMask } from './air';
 import { computeFloodMask } from './flood';
 import { computeOfficialFloodMask, computeOfficialFloodFutureMask } from './official-flood';
 import { computePluvialMask } from './pluvial';
-import { computeSeismicMask } from './seismic';
 import { computeLandslideMask } from './landslide';
 
 export interface MaskContext {
@@ -27,7 +26,6 @@ const MASK_PROVIDERS: Record<MaskKey, MaskCompute> = {
   q100: computeOfficialFloodMask,
   q100f: computeOfficialFloodFutureMask,
   pluvial: computePluvialMask,
-  seismic: computeSeismicMask,
   landslide: computeLandslideMask,
 };
 
@@ -40,7 +38,7 @@ function emptyMask(key: MaskKey): MaskField {
     max: null,
     unit: '',
     label: MASK_META[key].label,
-    note: 'Данные временно недоступны.',
+    note: 'Data temporarily unavailable.',
     degraded: true,
   };
 }
@@ -52,7 +50,7 @@ export async function computeAllMasks(ctx: MaskContext): Promise<Record<MaskKey,
       try {
         return [key, await MASK_PROVIDERS[key](ctx)] as const;
       } catch (err) {
-        console.warn(`[маска:${key}] недоступна: ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(`[mask:${key}] unavailable: ${err instanceof Error ? err.message : String(err)}`);
         return [key, emptyMask(key)] as const;
       }
     }),

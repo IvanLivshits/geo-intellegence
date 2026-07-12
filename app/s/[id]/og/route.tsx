@@ -42,10 +42,10 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   }
 
   const coordsText = meta ? `${meta.center[1].toFixed(5)}, ${meta.center[0].toFixed(5)}` : '';
-  const label = meta ? meta.label || coordsText : 'Снимок не найден';
+  const label = meta ? meta.label || coordsText : 'Snapshot not found';
   const showCoords = Boolean(meta) && label.replace(/\s/g, '') !== coordsText.replace(/\s/g, '');
   const date = meta
-    ? new Date(meta.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+    ? new Date(meta.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : '';
 
   const art = buildArt(meta, payload, (meta?.id ?? '0badc0de').slice(0, 8));
@@ -112,7 +112,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
             color: '#7d8187',
           }}
         >
-          {date ? `снимок от ${date} · 3D-сканер рисков района` : '3D-сканер рисков района'}
+          {date ? `snapshot from ${date} · 3D district risk scanner` : '3D district risk scanner'}
         </div>
       </div>
     ),

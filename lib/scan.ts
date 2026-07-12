@@ -152,7 +152,7 @@ interface ZoneGeometry {
 
 function zoneGeometry(polygon: [number, number][]): ZoneGeometry {
   if (ringSelfIntersects(polygon)) {
-    throw new Error('Контур зоны пересекает сам себя — обведите заново без пересечений');
+    throw new Error('Zone outline crosses itself — redraw it without self-intersections');
   }
   const lats = polygon.map((p) => p[0]);
   const lons = polygon.map((p) => p[1]);
@@ -162,9 +162,9 @@ function zoneGeometry(polygon: [number, number][]): ZoneGeometry {
   const half = Math.max(halfW, halfH);
   if (half > ZONE_HALF_MAX) {
     const side = half * 2;
-    const sideText = side >= 10000 ? `~${Math.round(side / 1000)} км` : `~${Math.round(side)} м`;
+    const sideText = side >= 10000 ? `~${Math.round(side / 1000)} km` : `~${Math.round(side)} m`;
     throw new Error(
-      `Зона слишком большая: ${sideText} по стороне, максимум ${(ZONE_HALF_MAX * 2) / 1000} км — приблизьте карту и обведите участок компактнее`,
+      `Zone is too large: ${sideText} per side, maximum is ${(ZONE_HALF_MAX * 2) / 1000} km — zoom in and outline a more compact area`,
     );
   }
   const radius = Math.max(250, Math.ceil(half * 1.15));
@@ -198,7 +198,7 @@ export function computeScan(input: ScanInput): Promise<ScanPayload> {
   const label = input.label ?? null;
   let shared = inflightScans.get(cacheKey);
   if (shared) {
-    console.log('[карта] расчёт уже идёт — переиспользую результат');
+    console.log('[map] computation already running — reusing the result');
   } else {
     shared = computeScanInner(input);
     inflightScans.set(cacheKey, shared);
@@ -218,7 +218,7 @@ async function computeScanInner(input: ScanInput): Promise<ScanPayload> {
   const cacheKey = payloadCacheKey(input);
   const cachedPayload = await cacheGet<ScanPayload>(cacheKey);
   if (cachedPayload != null) {
-    console.log('[карта] кэш ✓ готовый payload');
+    console.log('[map] cache ✓ ready payload');
     return { ...cachedPayload, label };
   }
 
@@ -250,14 +250,14 @@ async function computeScanInner(input: ScanInput): Promise<ScanPayload> {
       .pw out geom;`;
 
   const overturePromise = computeOvertureBuildings({ lat, lon, radius }).catch((err) => {
-    console.warn(`[overture] застройка недоступна, фолбэк на OSM: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`[overture] buildings unavailable, falling back to OSM: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   });
 
-  console.log(`[карта] OSM-запрос Overpass · bbox ±${radius} м · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+  console.log(`[map] OSM Overpass query · bbox ±${radius} m · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
   const res = await overpass(q);
   const els: OsmElement[] = res.elements || [];
-  console.log(`[карта] OSM получен · элементов: ${els.length}`);
+  console.log(`[map] OSM received · elements: ${els.length}`);
 
   const masksPromise = computeAllMasks({
     lat,
@@ -322,7 +322,7 @@ async function computeScanInner(input: ScanInput): Promise<ScanPayload> {
     overturePromise.finally(() => clearTimeout(overtureTimer)),
     new Promise<null>((resolve) => {
       overtureTimer = setTimeout(() => {
-        console.warn('[overture] дольше 30 с — беру OSM, Overture докачается в кэш фоном');
+        console.warn('[overture] over 30 s — using OSM, Overture will finish loading into cache in the background');
         resolve(null);
       }, 30000);
     }),
@@ -332,7 +332,7 @@ async function computeScanInner(input: ScanInput): Promise<ScanPayload> {
     overture && overture.buildings.length > osmBuildings.length ? overture.buildings : osmBuildings;
   const buildingsSource = buildings === osmBuildings ? 'OSM' : 'Overture';
   console.log(
-    `[карта] застройка: ${buildingsSource} ${buildings.length} (OSM ${osmBuildings.length}) · дороги/ж-д: ${roads.length} · активность: ${activity.length} · маски: шум ${masks.noise.avg ?? '—'} дБ · воздух ${masks.air.avg ?? '—'} · затопление ${masks.flood.avg ?? '—'}`,
+    `[map] buildings: ${buildingsSource} ${buildings.length} (OSM ${osmBuildings.length}) · roads/rail: ${roads.length} · activity: ${activity.length} · masks: noise ${masks.noise.avg ?? '—'} dB · air ${masks.air.avg ?? '—'} · flood ${masks.flood.avg ?? '—'}`,
   );
 
   const payload: ScanPayload = {
@@ -350,7 +350,7 @@ async function computeScanInner(input: ScanInput): Promise<ScanPayload> {
   };
   const degraded = overture == null || Object.values(masks).some((m) => m.degraded);
   if (degraded) {
-    console.warn('[карта] payload деградирован (фолбэки/пропуски) — кэш только на 2 мин');
+    console.warn('[map] payload degraded (fallbacks/gaps) — cached for 2 min only');
   }
   await cacheSet(cacheKey, payload, degraded ? PAYLOAD_DEGRADED_TTL_MS : PAYLOAD_CACHE_TTL_MS);
   return payload;

@@ -43,6 +43,7 @@ export interface FetchOptions {
   retries?: number;
   timeoutMs?: number;
   cacheKeyUrl?: string;
+  validate?: (data: unknown) => boolean;
 }
 
 export async function fetchData(url: string, opts: FetchOptions = {}): Promise<any> {
@@ -61,8 +62,12 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
 
   const cached = await cacheGet<unknown>(`http:${key}`);
   if (cached != null) {
-    console.log(`[сеть] кэш ✓ ${host}`);
-    return cached;
+    if (opts.validate && !opts.validate(cached)) {
+      console.warn(`[net] cached response for ${host} is unusable — ignoring it and refetching`);
+    } else {
+      console.log(`[net] cache ✓ ${host}`);
+      return cached;
+    }
   }
 
   let lastErr: unknown;
@@ -72,7 +77,7 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       const started = Date.now();
-      console.log(`[сеть] ${method} ${host} …${attempt ? ` (попытка ${attempt + 1})` : ''}`);
+      console.log(`[net] ${method} ${host} …${attempt ? ` (attempt ${attempt + 1})` : ''}`);
       const res = await fetch(url, {
         method,
         body,
@@ -83,7 +88,7 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
       clearTimeout(timer);
       if (!res.ok) {
         if ([429, 502, 503, 504].includes(res.status) && attempt < retries) {
-          console.warn(`[сеть] ${res.status} ${host} — повтор через ${1500 * (attempt + 1)} мс`);
+          console.warn(`[net] ${res.status} ${host} — retrying in ${1500 * (attempt + 1)} ms`);
           await sleep(1500 * (attempt + 1));
           continue;
         }
@@ -92,12 +97,17 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
         throw err;
       }
       const data = json ? await res.json() : await res.text();
-      console.log(`[сеть] ✓ ${host} · ${Date.now() - started} мс`);
+      if (opts.validate && !opts.validate(data)) {
+        const err = new Error(`${host} returned an empty dataset`) as Error & { emptyDataset?: boolean };
+        err.emptyDataset = true;
+        throw err;
+      }
+      console.log(`[net] ✓ ${host} · ${Date.now() - started} ms`);
       await cacheSet(`http:${key}`, data, ttlMs);
       return data;
     } catch (err) {
       lastErr = err;
-      console.warn(`[сеть] ✕ ${host} · ${(err as Error).message}`);
+      console.warn(`[net] ✕ ${host} · ${(err as Error).message}`);
       if ((err as Error & { noRetry?: boolean }).noRetry) throw err;
       if (attempt < retries) await sleep(1000 * (attempt + 1));
     }
@@ -105,9 +115,10 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
   throw lastErr;
 }
 
+const EMPTY_QUORUM = 2;
+
 const OVERPASS_MIRRORS = [
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.osm.ch/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
@@ -120,23 +131,46 @@ export async function overpass(query: string, opts: FetchOptions = {}): Promise<
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       cacheKeyUrl: 'overpass',
       retries: 0,
+      validate: (data) => {
+        const els = (data as { elements?: unknown[] })?.elements;
+        return Array.isArray(els) && els.length > 0;
+      },
       ...opts,
     });
 
   let lastErr: unknown;
+  let empties = 0;
+  let attempts = 0;
   for (let round = 0; round < 2; round++) {
     if (round > 0) {
-      console.warn('[сеть] все зеркала Overpass не ответили — пауза 2 с и второй круг');
+      console.warn('[net] no Overpass mirror returned usable data — pausing 2 s and trying a second round');
       await sleep(2000);
     }
     for (const url of OVERPASS_MIRRORS) {
+      const host = new URL(url).host;
+      attempts++;
       try {
         return await request(url);
       } catch (err) {
         lastErr = err;
-        console.warn(`[сеть] Overpass-зеркало ${new URL(url).host} не ответило — пробую следующее`);
+        if ((err as Error & { emptyDataset?: boolean }).emptyDataset) {
+          empties++;
+          console.warn(`[net] Overpass mirror ${host} returned an empty dataset — trying the next one`);
+        } else {
+          console.warn(`[net] Overpass mirror ${host} unusable (${(err as Error).message}) — trying the next one`);
+        }
       }
     }
   }
-  throw lastErr;
+
+  if (empties >= EMPTY_QUORUM) {
+    console.warn(
+      `[net] ${empties} independent Overpass mirrors agree this bbox is empty — treating it as a genuinely empty area`,
+    );
+    return { elements: [] };
+  }
+
+  throw new Error(
+    `No Overpass mirror returned usable data (last: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}). Refusing to treat a failed lookup as "no risk".`,
+  );
 }

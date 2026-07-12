@@ -35,7 +35,7 @@ const MAX_COLS = 2;
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function OrbImage({ shareId }: { shareId: string }) {
@@ -105,7 +105,7 @@ function LocationCard({
   onRetry: () => void;
 }) {
   const starfield = useMemo(() => starfieldUri(loc.share_id, 640, 220), [loc.share_id]);
-  const title = loc.name || loc.label || 'Локация';
+  const title = loc.name || loc.label || 'Location';
   const coord = loc.center ? `${loc.center[1].toFixed(5)}, ${loc.center[0].toFixed(5)}` : null;
   const showCoord = coord != null && title.replace(/\s/g, '') !== coord.replace(/\s/g, '');
   const ready = loc.status === 'ready';
@@ -179,18 +179,18 @@ function LocationCard({
           {ready ? (
             <>
               <span className="font-mono text-mono-badge text-smoke">{fmtDate(loc.created_at)}</span>
-              <StatChip label="Шум" value={loc.stats?.noise} />
-              <StatChip label="Паводок" value={loc.stats?.q100} />
-              <StatChip label="Ливень" value={loc.stats?.pluvial} />
+              <StatChip label="Noise" value={loc.stats?.noise} />
+              <StatChip label="Flood" value={loc.stats?.q100} />
+              <StatChip label="Pluvial" value={loc.stats?.pluvial} />
             </>
           ) : processing ? (
             <span className="font-mono text-mono-badge uppercase tracking-wider text-ash">
-              идёт расчёт…
+              computing…
             </span>
           ) : (
             <span className="flex items-center gap-3">
               <span className="font-mono text-mono-badge uppercase tracking-wider text-alert-red">
-                расчёт не удался
+                scan failed
               </span>
               {loc.input && (
                 <button
@@ -199,7 +199,7 @@ function LocationCard({
                   disabled={busy}
                   className="font-mono text-mono-badge uppercase tracking-wider text-ash transition-colors enabled:hover:text-stellar-white disabled:opacity-40"
                 >
-                  Повторить
+                  Retry
                 </button>
               )}
             </span>
@@ -217,7 +217,7 @@ function LocationCard({
                 disabled={busy}
                 className="bg-void-black/70 px-2 py-1 font-mono text-mono-badge text-alert-red backdrop-blur-sm hover:text-alert-red disabled:opacity-40"
               >
-                Удалить?
+                Delete?
               </button>
               <button
                 type="button"
@@ -234,14 +234,14 @@ function LocationCard({
                 onClick={onStartEdit}
                 className="bg-void-black/70 px-2 py-1 font-mono text-mono-badge text-ash backdrop-blur-sm transition-colors hover:text-stellar-white"
               >
-                Переименовать
+                Rename
               </button>
               <button
                 type="button"
                 onClick={onAskDelete}
                 className="bg-void-black/70 px-2 py-1 font-mono text-mono-badge text-ash backdrop-blur-sm transition-colors hover:text-alert-red"
               >
-                Удалить
+                Delete
               </button>
             </>
           )}
@@ -375,7 +375,7 @@ export default function AccountClient({
         prev.map((l) => (l.id === loc.id ? { ...l, status: 'processing', error: null } : l)),
       );
     } else {
-      setError('Не удалось перезапустить расчёт');
+      setError('Could not restart the scan');
     }
     setBusy(null);
   }
@@ -405,7 +405,7 @@ export default function AccountClient({
             <div className="font-mono text-mono-badge text-ash">{user.name || user.email}</div>
           </div>
           <Button variant="nav" onClick={() => signOut({ callbackUrl: '/' })}>
-            Выйти
+            Sign out
           </Button>
         </div>
       </header>
@@ -413,10 +413,10 @@ export default function AccountClient({
       <main className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col overflow-hidden px-5 py-5">
         <div className="mb-3 flex flex-none items-baseline justify-between">
           <h1 className="font-mono text-mono-label uppercase tracking-wider text-ash">
-            Сохранённые локации
+            Saved locations
           </h1>
           <span className="font-mono text-mono-badge text-smoke">
-            {total > 0 ? `${rangeFrom}–${rangeTo} из ${total}` : '0'}
+            {total > 0 ? `${rangeFrom}–${rangeTo} of ${total}` : '0'}
           </span>
         </div>
 
@@ -428,7 +428,8 @@ export default function AccountClient({
 
         {total === 0 ? (
           <div className="flex flex-1 items-center justify-center border border-graphite text-center font-sans text-body text-ash">
-            Пока пусто. Постройте карту на главной и нажмите «Поделиться» — локация появится здесь.
+            Nothing here yet. Build a map on the home page and press “Share” — the location will
+            appear here.
           </div>
         ) : (
           <div ref={gridRef} className="min-h-0 flex-1 overflow-hidden">
@@ -469,7 +470,7 @@ export default function AccountClient({
         {total > 0 && (
           <div className="mt-3 flex flex-none items-center justify-between border-t border-graphite pt-3">
             <span className="font-mono text-mono-badge text-smoke">
-              {pageSize} на странице
+              {pageSize} per page
             </span>
             <div className="flex items-center gap-3">
               <button
@@ -478,7 +479,7 @@ export default function AccountClient({
                 disabled={page <= 0}
                 className="font-mono text-mono-label uppercase tracking-wider text-ash transition-colors enabled:hover:text-stellar-white disabled:opacity-30"
               >
-                ‹ Назад
+                ‹ Prev
               </button>
               <span className="min-w-[64px] text-center font-mono text-mono-badge text-stellar-white">
                 {page + 1} / {pageCount}
@@ -489,7 +490,7 @@ export default function AccountClient({
                 disabled={page >= pageCount - 1}
                 className="font-mono text-mono-label uppercase tracking-wider text-ash transition-colors enabled:hover:text-stellar-white disabled:opacity-30"
               >
-                Вперёд ›
+                Next ›
               </button>
             </div>
           </div>

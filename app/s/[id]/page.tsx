@@ -17,10 +17,10 @@ function requestBase(): URL {
 
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const meta = await readShareMeta(params.id);
-  if (!meta) return { title: 'Снимок не найден · Geo-Intelligence' };
+  if (!meta) return { title: 'Snapshot not found · Geo-Intelligence' };
   const place = meta.label || `${meta.center[1].toFixed(4)}, ${meta.center[0].toFixed(4)}`;
-  const title = `Риски района · ${place}`;
-  const description = '3D-разбор рисков района по открытым данным. Geo-Intelligence.';
+  const title = `District risks · ${place}`;
+  const description = '3D district risk breakdown built from open data. Geo-Intelligence.';
   const ogUrl = new URL(`/s/${params.id}/og`, requestBase()).toString();
   return {
     title,

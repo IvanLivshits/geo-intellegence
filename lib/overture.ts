@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 const CACHE_TTL_MS = 30 * 24 * 3600 * 1000;
 const RELEASE = '2026-06-17.0';
 const NOTE =
-  'Здания · Overture (OSM ∪ Google Open Buildings ∪ Microsoft). Высота часто отсутствует → дефолт 10 м.';
+  'Buildings · Overture (OSM ∪ Google Open Buildings ∪ Microsoft). Height is often missing → default 10 m.';
 
 interface Box {
   xmin: number;
@@ -129,7 +129,7 @@ export async function computeOvertureBuildings(input: {
 
   const cached = await cacheGet<OvertureResult>(cacheKey);
   if (cached != null) {
-    console.log('[здания] кэш ✓ Overture');
+    console.log('[buildings] cache ✓ Overture');
     return cached;
   }
 
@@ -140,7 +140,7 @@ export async function computeOvertureBuildings(input: {
     `WHERE bbox.xmin BETWEEN ${box.xmin} AND ${box.xmax} AND bbox.ymin BETWEEN ${box.ymin} AND ${box.ymax};`;
 
   const binary = join(process.cwd(), 'bin', 'duckdb');
-  console.log(`[здания] Overture-запрос · bbox ±${radius} м · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+  console.log(`[buildings] Overture query · bbox ±${radius} m · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
 
   let stdout: string;
   try {
@@ -150,17 +150,17 @@ export async function computeOvertureBuildings(input: {
     });
     stdout = result.stdout;
   } catch (err) {
-    throw new Error(`Overture/DuckDB запрос не выполнен: ${(err as Error).message}`);
+    throw new Error(`Overture/DuckDB query failed: ${(err as Error).message}`);
   }
 
   let rows: OvertureRow[];
   try {
     const trimmed = stdout.trim();
     const parsed = trimmed ? JSON.parse(trimmed) : [];
-    if (!Array.isArray(parsed)) throw new Error('ожидался массив');
+    if (!Array.isArray(parsed)) throw new Error('an array was expected');
     rows = parsed as OvertureRow[];
   } catch (err) {
-    throw new Error(`Overture: не удалось разобрать вывод DuckDB как JSON: ${(err as Error).message}`);
+    throw new Error(`Overture: failed to parse DuckDB output as JSON: ${(err as Error).message}`);
   }
 
   const geoRows: OvertureRow[] = rows.map((r) => ({
@@ -171,7 +171,7 @@ export async function computeOvertureBuildings(input: {
 
   const buildings = rowsToBuildings(geoRows, box);
   const result: OvertureResult = { buildings, count: buildings.length, note: NOTE };
-  console.log(`[здания] Overture получено · зданий: ${result.count}`);
+  console.log(`[buildings] Overture received · buildings: ${result.count}`);
 
   await cacheSet(cacheKey, result, CACHE_TTL_MS);
 
@@ -249,7 +249,7 @@ export async function computeOvertureWater(input: {
     createHash('sha1').update(`${lat.toFixed(5)},${lon.toFixed(5)},${radius}`).digest('hex');
   const cached = await cacheGet<{ lat: number; lon: number }[]>(key);
   if (cached != null) {
-    console.log('[вода] кэш ✓ Overture water');
+    console.log('[water] cache ✓ Overture water');
     return cached;
   }
 
@@ -260,7 +260,7 @@ export async function computeOvertureWater(input: {
     `WHERE bbox.xmin <= ${east} AND bbox.xmax >= ${west} AND bbox.ymin <= ${north} AND bbox.ymax >= ${south};`;
 
   const binary = join(process.cwd(), 'bin', 'duckdb');
-  console.log(`[вода] Overture-запрос (S3-фолбэк) · bbox ±${radius} м · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+  console.log(`[water] Overture query (S3 fallback) · bbox ±${radius} m · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
 
   const result = await execFileAsync(binary, ['-json', '-c', query], {
     timeout: 150000,
@@ -292,7 +292,7 @@ export async function computeOvertureWater(input: {
     for (let i = 0; i < points.length; i += stride) capped.push(points[i]);
   }
 
-  console.log(`[вода] Overture water · точек: ${capped.length}`);
+  console.log(`[water] Overture water · points: ${capped.length}`);
   await cacheSet(key, capped, CACHE_TTL_MS);
   return capped;
 }

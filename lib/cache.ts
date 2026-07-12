@@ -17,7 +17,7 @@ function getClient(): Redis | null {
     client.on('error', (err) => {
       if (!unavailable) {
         unavailable = true;
-        console.warn(`[кэш] Redis недоступен (${err.message}) — работаю без кэша`);
+        console.warn(`[cache] Redis unavailable (${err.message}) — running without cache`);
       }
     });
     client.on('ready', () => {

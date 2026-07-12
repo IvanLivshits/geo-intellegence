@@ -71,7 +71,7 @@ async function fetchWaterPoints(
   const q = `[out:json][timeout:60];
       ( way(${bbox})[natural=water];
         relation(${bbox})[natural=water];
-        way(${bbox})[waterway~"^(river|stream|canal|drain)$"]; )->.w;
+        way(${bbox})[waterway~"^(river|stream)$"]; )->.w;
       ( way(${bbox})[man_made~"^(dyke|embankment|levee|flood_wall)$"];
         way(${bbox})[barrier~"^(flood_wall|flood_barrier)$"];
         way(${bbox})[waterway=dam]; )->.def;
@@ -154,12 +154,12 @@ export async function computeFloodMask(ctx: MaskContext): Promise<MaskField> {
 
   let waterRes = await fetchWaterPoints(lat, lon, radius * 2.5);
   if (waterRes.failed) {
-    console.warn('[затопление] все зеркала Overpass недоступны — фолбэк на Overture water (S3)');
+    console.warn('[flood] all Overpass mirrors unavailable — falling back to Overture water (S3)');
     try {
       const points = await computeOvertureWater({ lat, lon, radius: radius * 2.5 });
       waterRes = { points, sampled: false, failed: false, defenses: [], pumps: 0 };
     } catch (err) {
-      console.warn(`[затопление] Overture water тоже недоступен: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`[flood] Overture water is unavailable too: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   const elevations = await sampleElevations([...cells, ...waterRes.points]);
@@ -210,23 +210,23 @@ export async function computeFloodMask(ctx: MaskContext): Promise<MaskField> {
 
   const missing = cellElevs.filter((e) => e == null).length;
   const baseNote = water.length
-    ? `Модель HAND-lite: высота над ближайшей водой (реки/каналы/крупные водоёмы OSM в радиусе ${Math.round(radius * 2.5)} м; пруды и фонтаны игнорируются), рельеф Copernicus DEM GLO-30 (~30 м). ${HAND_SPAN_M}+ м над водой → риск 0. НЕ официальная карта затоплений.`
-    : `В радиусе ${Math.round(radius * 2.5)} м нет значимой воды (OSM) — рельефная экспозиция минимальна, риск ~0. НЕ официальная карта затоплений.`;
-  let note = waterRes.sampled ? `${baseNote} Точки воды прорежены для скорости.` : baseNote;
+    ? `HAND-lite model: height above the nearest natural watercourse (OSM rivers and streams, plus large water bodies within ${Math.round(radius * 2.5)} m). Irrigation canals, ditches, drains, ponds and fountains are excluded — they are engineered or minor channels, not flood sources. Terrain from Copernicus DEM GLO-30 (~30 m). ${HAND_SPAN_M}+ m above the water → risk 0. NOT an official hazard map.`
+    : `No significant water within ${Math.round(radius * 2.5)} m (OSM) — terrain exposure is minimal, risk ~0. NOT an official hazard map.`;
+  let note = waterRes.sampled ? `${baseNote} Water points were thinned out for speed.` : baseNote;
   if (waterRes.defenses.length) {
     const protectedPct = Math.round((protectedCells / (n * n)) * 100);
-    note = `Инженерная защита учтена: дамбы/валы (${waterRes.defenses.length} сегм.)${waterRes.pumps ? ` + насосные ×${waterRes.pumps}` : ''} — за сооружением риск ×${PROTECTION_FACTOR} (затронуто ${protectedPct}% ячеек). Защита НЕ абсолютна. ${note}`;
+    note = `Engineered defences accounted for: dykes/levees (${waterRes.defenses.length} segm.)${waterRes.pumps ? ` + pumping stations ×${waterRes.pumps}` : ''} — behind a structure risk is ×${PROTECTION_FACTOR} (${protectedPct}% of cells affected). Protection is NOT absolute. ${note}`;
   } else if (waterRes.pumps > 0) {
-    note = `Рядом насосные станции (×${waterRes.pumps}), но линейных дамб/валов в OSM не найдено — инженерный дисконт не применён. ${note}`;
+    note = `Pumping stations nearby (×${waterRes.pumps}), but no linear dykes/levees found in OSM — no engineering discount applied. ${note}`;
   } else if (!waterRes.failed && water.length) {
-    note = `Защитные сооружения в OSM рядом не найдены (или не замаплены) — риск без инженерного дисконта. ${note}`;
+    note = `No protective structures found nearby in OSM (or they are not mapped) — risk without an engineering discount. ${note}`;
   }
   if (waterRes.failed) {
-    note = '⚠ Данные о воде недоступны (Overpass не ответил) — поле не рассчитано. Перестройте позже. НЕ официальная карта затоплений.';
+    note = '⚠ Water data unavailable (Overpass did not respond) — the field was not computed. Rebuild later. NOT an official hazard map.';
   }
   if (missing > 0) {
     const pct = Math.round((missing / (n * n)) * 100);
-    note = `⚠ Поле НЕПОЛНОЕ: высоты получены для ${n * n - missing} из ${n * n} ячеек (${pct}% пропущено). Перестройте позже. ${note}`;
+    note = `⚠ Field is INCOMPLETE: elevations obtained for ${n * n - missing} of ${n * n} cells (${pct}% missing). Rebuild later. ${note}`;
   }
 
   const field = makeField(clipToZone(values, n, radius, ctx.zone), n, {
@@ -236,7 +236,7 @@ export async function computeFloodMask(ctx: MaskContext): Promise<MaskField> {
     alphaMin: 0,
     alphaMax: 210,
     unit: '%',
-    label: 'Риск разлива рек (модель)',
+    label: 'River flood risk (model)',
     note,
   });
   if (waterRes.failed || missing > 0) field.degraded = true;

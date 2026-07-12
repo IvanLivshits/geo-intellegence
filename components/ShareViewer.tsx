@@ -43,7 +43,7 @@ export default function ShareViewer({
     };
   }, [payloadUrl, meta.id]);
 
-  const date = new Date(meta.createdAt).toLocaleDateString('ru-RU', {
+  const date = new Date(meta.createdAt).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
@@ -59,7 +59,13 @@ export default function ShareViewer({
           [ GEO-INTELLIGENCE ]
         </a>
         <div className="flex items-center gap-4">
-          <div className="font-mono text-mono-badge text-ash">снимок от {date}</div>
+          <a
+            href={`/s/${meta.id}/memo`}
+            className="font-mono text-mono-badge uppercase tracking-widest text-ash hover:text-stellar-white"
+          >
+            Risk memo →
+          </a>
+          <div className="font-mono text-mono-badge text-ash">snapshot from {date}</div>
           <UserMenu user={user} />
         </div>
       </header>
@@ -71,19 +77,19 @@ export default function ShareViewer({
             onBack={() => {
               window.location.href = '/';
             }}
-            backLabel="← Свой скан"
+            backLabel="← Your own scan"
             initial={meta.ui ?? undefined}
           />
         )}
         {!payload && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-void-black px-6 text-center text-ash">
             {error ? (
-              <div className="font-sans text-body text-ash">Не удалось загрузить снимок: {error}</div>
+              <div className="font-sans text-body text-ash">Could not load the snapshot: {error}</div>
             ) : (
               <>
                 <div className="h-9 w-9 animate-spin rounded-full border border-graphite border-t-stellar-white" />
                 <div className="font-sans text-body text-ash">
-                  Загружаю снимок:{' '}
+                  Loading snapshot:{' '}
                   <span className="text-stellar-white">
                     {meta.label || `${meta.center[1].toFixed(4)}, ${meta.center[0].toFixed(4)}`}
                   </span>

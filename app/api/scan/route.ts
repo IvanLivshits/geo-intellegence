@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   const radius = Math.min(RADIUS_MAX, Math.max(RADIUS_MIN, radiusRaw));
 
   if (!polygon && (!Number.isFinite(lat) || !Number.isFinite(lon))) {
-    return new NextResponse('Нужны параметры lat и lon либо polygon', { status: 400 });
+    return new NextResponse('Either lat and lon parameters or polygon are required', { status: 400 });
   }
 
   try {
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     return NextResponse.json(payload);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const status = /Зона слишком большая|пересекает сам себя/.test(message) ? 400 : 500;
-    return new NextResponse('Ошибка: ' + message, { status });
+    const status = /Zone is too large|crosses itself/.test(message) ? 400 : 500;
+    return new NextResponse('Error: ' + message, { status });
   }
 }

@@ -16,20 +16,20 @@ async function download(url: string, name: string, unzipTif: boolean): Promise<s
   }
 
   await mkdir(DIR, { recursive: true });
-  console.log(`[растр] скачиваю ${name} · ${url.slice(0, 80)}…`);
+  console.log(`[raster] downloading ${name} · ${url.slice(0, 80)}…`);
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`растр ${name}: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`raster ${name}: HTTP ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
 
   if (unzipTif) {
     const entries = unzipSync(new Uint8Array(buf));
     const tifName = Object.keys(entries).find((k) => k.toLowerCase().endsWith('.tif'));
-    if (!tifName) throw new Error(`растр ${name}: в архиве нет .tif`);
+    if (!tifName) throw new Error(`raster ${name}: no .tif inside the archive`);
     await writeFile(path, Buffer.from(entries[tifName]));
   } else {
     await writeFile(path, buf);
   }
-  console.log(`[растр] готов ${name}`);
+  console.log(`[raster] ready ${name}`);
   return path;
 }
 

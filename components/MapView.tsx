@@ -493,7 +493,7 @@ export default function MapView({ payload, onBack, backLabel, initial, onUiChang
             getTooltip={({ object }: { object?: ProjectedActivity | null }) =>
               object && object.kindLabel
                 ? {
-                    html: `<b>${object.name}</b><br>${object.kindLabel} · ${object.dist} м · зона ~${object.radius} м`,
+                    html: `<b>${object.name}</b><br>${object.kindLabel} · ${object.dist} m · zone ~${object.radius} m`,
                     style: {
                       background: '#0c0c0b',
                       color: '#ffffff',
@@ -522,7 +522,7 @@ export default function MapView({ payload, onBack, backLabel, initial, onUiChang
           type="button"
           data-overlay
           onClick={onToggleTopView}
-          title="Вид сверху · 2D"
+          title="Top view · 2D"
           className={cn(
             'absolute bottom-3 left-3 z-10 h-8 rounded-full px-4 font-mono text-mono-badge backdrop-blur-sm transition-colors',
             topView

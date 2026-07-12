@@ -73,7 +73,7 @@ export default function App({ user }: { user: SessionUser | null }) {
         setPayload(data);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        showToast(message.startsWith('Ошибка') ? message : `Не удалось построить карту: ${message}`);
+        showToast(message.startsWith('Error') ? message : `Could not build the map: ${message}`);
       } finally {
         setLoading(false);
       }
@@ -89,12 +89,12 @@ export default function App({ user }: { user: SessionUser | null }) {
       setPointLabel(sp.label);
       setStatus(
         <>
-          Выбрано: <span className="text-stellar-white">{sp.label}</span> — уточните точку кликом
-          или нажмите «Построить».
+          Selected: <span className="text-stellar-white">{sp.label}</span> — refine the point with a
+          click or press “Build”.
         </>,
       );
     } else {
-      setStatus(<>Карта наведена на «{sp.label}» — обведите свою зону кликами.</>);
+      setStatus(<>Map centred on “{sp.label}” — outline your custom zone with clicks.</>);
     }
   }
 
@@ -103,18 +103,18 @@ export default function App({ user }: { user: SessionUser | null }) {
     setPointLabel(null);
     setStatus(
       <>
-        Точка:{' '}
+        Point:{' '}
         <span className="text-stellar-white">
           {lat.toFixed(5)}, {lon.toFixed(5)}
         </span>{' '}
-        · зона ±{zoneSize} м — нажмите «Построить».
+        · zone ±{zoneSize} m — press “Build”.
       </>,
     );
   }
 
   function handleAddVert(lat: number, lon: number) {
     if (verts.length >= 2 && edgeCrossesPath(verts[verts.length - 1], [lat, lon], verts)) {
-      showToast('Линии зоны не должны пересекаться — поставьте точку в другом месте.');
+      showToast('Zone edges must not cross — place the point somewhere else.');
       return;
     }
     setVerts((prev) => [...prev, [lat, lon]]);
@@ -125,11 +125,11 @@ export default function App({ user }: { user: SessionUser | null }) {
     setPointLabel(null);
     setStatus(
       <>
-        Точка:{' '}
+        Point:{' '}
         <span className="text-stellar-white">
           {lat.toFixed(5)}, {lon.toFixed(5)}
         </span>{' '}
-        · зона ±{zoneSize} м — нажмите «Построить».
+        · zone ±{zoneSize} m — press “Build”.
       </>,
     );
   }
@@ -144,11 +144,11 @@ export default function App({ user }: { user: SessionUser | null }) {
 
   function handleCloseZone() {
     if (ringSelfIntersects(verts)) {
-      showToast('Контур пересекает сам себя — уберите пересечение («Сбросить») и обведите заново.');
+      showToast('The outline crosses itself — clear it (“Reset”) and draw the zone again.');
       return;
     }
     setClosed(true);
-    setStatus('Зона замкнута — нажмите «Построить».');
+    setStatus('Zone closed — press “Build”.');
   }
 
   function resetZone() {
@@ -189,12 +189,12 @@ export default function App({ user }: { user: SessionUser | null }) {
   function build() {
     if (!canBuild) {
       setStatus(
-        mode === 'point' ? 'Сначала выберите точку на карте.' : 'Обведите зону: нужно минимум 3 точки.',
+        mode === 'point' ? 'Pick a point on the map first.' : 'Outline the zone: at least 3 points needed.',
       );
       return;
     }
     if (mode === 'zone' && ringSelfIntersects(verts)) {
-      showToast('Контур зоны пересекает сам себя — нажмите «Сбросить» и обведите заново.');
+      showToast('The zone outline crosses itself — press “Reset” and draw it again.');
       return;
     }
     let url: string;
@@ -216,12 +216,12 @@ export default function App({ user }: { user: SessionUser | null }) {
         encodeURIComponent(title);
       setStatus(
         <>
-          <span className="text-stellar-white">{title}</span> · зона ±
-          <span className="text-stellar-white">{zoneSize}</span> м
+          <span className="text-stellar-white">{title}</span> · zone ±
+          <span className="text-stellar-white">{zoneSize}</span> m
         </>,
       );
     } else {
-      title = pointLabel ? `Зона · ${pointLabel}` : 'Своя зона';
+      title = pointLabel ? `Zone · ${pointLabel}` : 'Custom zone';
       const verts6 = verts.map(([la, lo]): [number, number] => [round6(la), round6(lo)]);
       input = { polygon: verts6, label: title };
       const poly = verts6.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join(';');
@@ -229,7 +229,7 @@ export default function App({ user }: { user: SessionUser | null }) {
       setStatus(
         <>
           <span className="text-stellar-white">{title}</span> ·{' '}
-          <span className="text-stellar-white">{verts.length}</span> точек
+          <span className="text-stellar-white">{verts.length}</span> points
         </>,
       );
     }
@@ -295,8 +295,8 @@ export default function App({ user }: { user: SessionUser | null }) {
       const message = err instanceof Error ? err.message : String(err);
       showToast(
         created
-          ? `Ссылка создана, но буфер обмена недоступен — скопируйте вручную: ${created}`
-          : message.replace(/^Ошибка:\s*/, ''),
+          ? `Link created, but the clipboard is unavailable — copy it manually: ${created}`
+          : message.replace(/^Error:\s*/, ''),
       );
       setShareState('idle');
     }
@@ -312,19 +312,19 @@ export default function App({ user }: { user: SessionUser | null }) {
           {user && scanInput && (payload || loading) && (
             <Button variant="nav" onClick={handleSave} disabled={saveState !== 'idle'}>
               {saveState === 'busy'
-                ? 'Сохраняю…'
+                ? 'Saving…'
                 : saveState === 'done'
-                  ? 'В кабинете ✓'
-                  : 'Сохранить'}
+                  ? 'In account ✓'
+                  : 'Save'}
             </Button>
           )}
           {payload && !loading && (
             <Button variant="nav" onClick={handleShare} disabled={shareState === 'busy'}>
               {shareState === 'busy'
-                ? 'Создаю…'
+                ? 'Creating…'
                 : shareState === 'done'
-                  ? 'Ссылка скопирована ✓'
-                  : 'Поделиться ↗'}
+                  ? 'Link copied ✓'
+                  : 'Share ↗'}
             </Button>
           )}
           <UserMenu user={user} />
@@ -363,7 +363,7 @@ export default function App({ user }: { user: SessionUser | null }) {
                       : 'text-ash hover:text-stellar-white',
                   )}
                 >
-                  Точка
+                  Point
                 </button>
                 <button
                   type="button"
@@ -375,17 +375,17 @@ export default function App({ user }: { user: SessionUser | null }) {
                       : 'text-ash hover:text-stellar-white',
                   )}
                 >
-                  Своя зона
+                  Custom zone
                 </button>
               </div>
               {mode === 'point' ? (
                 <div className="px-1 py-3">
                   <div className="flex items-baseline justify-between">
                     <span className="font-mono text-mono-badge uppercase tracking-wider text-ash">
-                      Зона расчёта
+                      Compute zone
                     </span>
                     <span className="whitespace-nowrap font-mono text-mono-label text-stellar-white">
-                      ±{zoneSize} м
+                      ±{zoneSize} m
                     </span>
                   </div>
                   <input
@@ -396,18 +396,18 @@ export default function App({ user }: { user: SessionUser | null }) {
                     value={zoneSize}
                     onChange={(e) => setZoneSize(parseInt(e.target.value, 10))}
                     className="mt-3 w-full accent-signal-blue"
-                    aria-label="Размер зоны, м"
+                    aria-label="Zone size, m"
                   />
                   <div className="mt-3 font-sans text-body text-ash">
-                    Кликните точку на карте или найдите адрес — расчёт пройдёт в квадрате вокруг
-                    неё.
+                    Click a point on the map or search for an address — the scan runs in the square
+                    around it.
                   </div>
                 </div>
               ) : (
                 <div className="px-1 py-3">
                   <div className="flex items-baseline justify-between">
                     <span className="font-mono text-mono-badge uppercase tracking-wider text-ash">
-                      Точек: {verts.length}
+                      Points: {verts.length}
                     </span>
                     <button
                       type="button"
@@ -415,34 +415,34 @@ export default function App({ user }: { user: SessionUser | null }) {
                       disabled={!verts.length}
                       className="font-mono text-mono-label text-ash enabled:hover:text-stellar-white disabled:opacity-40"
                     >
-                      Сбросить ✕
+                      Reset ✕
                     </button>
                   </div>
                   {zoneDims && (
                     <div className="mt-2 font-mono text-mono-badge text-ash">
                       <span className={zoneTooBig ? 'text-alert-red' : 'text-stellar-white'}>
-                        {zoneDims.w} × {zoneDims.h} м
+                        {zoneDims.w} × {zoneDims.h} m
                       </span>
                       {zoneDims.areaM2 > 0 && (
                         <>
                           {' · '}
                           {zoneDims.areaM2 >= 10000
-                            ? `${(zoneDims.areaM2 / 1e6).toFixed(2)} км²`
-                            : `${Math.round(zoneDims.areaM2)} м²`}
+                            ? `${(zoneDims.areaM2 / 1e6).toFixed(2)} km²`
+                            : `${Math.round(zoneDims.areaM2)} m²`}
                         </>
                       )}
                       {zoneTooBig && (
                         <div className="mt-1 text-alert-red">
-                          больше лимита {(ZONE_HALF_MAX * 2) / 1000} × {(ZONE_HALF_MAX * 2) / 1000} км —
-                          уменьшите зону
+                          over the {(ZONE_HALF_MAX * 2) / 1000} × {(ZONE_HALF_MAX * 2) / 1000} km limit —
+                          shrink the zone
                         </div>
                       )}
                     </div>
                   )}
                   <div className="mt-3 font-sans text-body text-ash">
                     {closed
-                      ? 'Зона замкнута — нажмите «Построить». Точки можно двигать мышью.'
-                      : 'Обводите участок кликами по карте (минимум 3 точки). Замкните кликом по первой — белой — точке. Точки можно двигать.'}
+                      ? 'Zone closed — press “Build”. Points can be dragged with the mouse.'
+                      : 'Outline the area with clicks on the map (at least 3 points). Close it by clicking the first — white — point. Points can be dragged.'}
                   </div>
                 </div>
               )}
@@ -452,7 +452,7 @@ export default function App({ user }: { user: SessionUser | null }) {
                 </div>
               )}
               <Button variant="nav" onClick={build} disabled={loading || !canBuild} className="mt-1 w-full">
-                Построить ↗
+                Build ↗
               </Button>
             </div>
           </>
@@ -470,10 +470,10 @@ export default function App({ user }: { user: SessionUser | null }) {
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-void-black px-6 text-center text-ash">
             <div className="h-9 w-9 animate-spin rounded-full border border-graphite border-t-stellar-white" />
             <div className="font-sans text-body font-normal text-ash">
-              Считаю карту для: <span className="text-stellar-white">{scanTitle}</span> …
+              Computing the map for: <span className="text-stellar-white">{scanTitle}</span> …
             </div>
             <div className="font-mono text-mono-badge font-normal text-ash">
-              Идёт полный анализ · {elapsed.toFixed(1)} с
+              Full analysis running · {elapsed.toFixed(1)} s
             </div>
           </div>
         )}

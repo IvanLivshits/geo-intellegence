@@ -60,7 +60,7 @@ export async function computeNoiseMask(ctx: MaskContext): Promise<MaskField> {
     dbs.push(lden);
   }
 
-  console.log(`[шум] поле ${n}×${n} готово · ячеек со звуком: ${dbs.length}`);
+  console.log(`[noise] field ${n}×${n} ready · cells with sound: ${dbs.length}`);
 
   return {
     n,
@@ -68,8 +68,8 @@ export async function computeNoiseMask(ctx: MaskContext): Promise<MaskField> {
     avg: dbs.length ? Math.round(dbs.reduce((s, v) => s + v, 0) / dbs.length) : null,
     min: dbs.length ? Math.min(...dbs) : null,
     max: dbs.length ? Math.max(...dbs) : null,
-    unit: 'дБ',
+    unit: 'dB',
     label: MASK_META.noise.label,
-    note: 'Модель по классам дорог OSM (не замер).',
+    note: 'Model based on OSM road classes (not a measurement).',
   };
 }

@@ -14,15 +14,15 @@ const SCENARIOS = {
     tag: 'v2',
     river: `${BASE}/inunriver_historical_000000000WATCH_1980_rp00100.tif`,
     coast: `${BASE}/inuncoast_historical_wtsub_hist_rp0100_0.tif`,
-    label: 'Паводок Q100 · WRI',
-    note: 'Официальная глобальная модель: WRI Aqueduct (GLOFRIS) — глубина паводка «раз в 100 лет», max(речной, прибрежный с учётом проседания грунта). Разрешение ~1 км, БЕЗ локальной инженерной защиты. Ливни/дренаж не входят — см. маски «Риск разлива рек» и «Ливневое подтопление».',
+    label: 'Flood Q100 · WRI',
+    note: 'Official global model: WRI Aqueduct (GLOFRIS) — depth of a "once in 100 years" flood, max(riverine, coastal including land subsidence). Resolution ~1 km, WITHOUT local engineered defences. Rainfall/drainage are not included — see the "River flood risk" and "Pluvial flooding" masks.',
   },
   future2050: {
     tag: 'f2050',
     river: `${BASE}/inunriver_rcp8p5_00000NorESM1-M_2050_rp00100.tif`,
     coast: `${BASE}/inuncoast_rcp8p5_wtsub_2050_rp0100_0.tif`,
-    label: 'Паводок Q100 · 2050 · WRI',
-    note: 'Климатический сценарий 2050 года (RCP 8.5, модель NorESM1-M): глубина 100-летнего паводка при пессимистичной траектории выбросов, max(речной, прибрежный с проседанием). WRI Aqueduct, ~1 км, без локальной защиты. Сравнивайте с сегодняшним Q100: значения могут быть и выше, и НИЖЕ сегодняшних — климат меняет осадки в обе стороны (Средиземноморье, например, сохнет).',
+    label: 'Flood Q100 · 2050 · WRI',
+    note: 'Climate scenario for 2050 (RCP 8.5, NorESM1-M model): depth of a 100-year flood under a pessimistic emissions trajectory, max(riverine, coastal with subsidence). WRI Aqueduct, ~1 km, without local defences. Compare with today\'s Q100: values can be both higher and LOWER than today\'s — climate shifts precipitation in both directions (the Mediterranean, for instance, is drying out).',
   },
 } as const;
 
@@ -53,13 +53,13 @@ async function computeScenario(
       .digest('hex');
   const cached = await cacheGet<MaskField>(key);
   if (cached != null) {
-    console.log(`[q100] кэш ✓ WRI Aqueduct (${scenario.tag})`);
+    console.log(`[q100] cache ✓ WRI Aqueduct (${scenario.tag})`);
     return cached;
   }
 
   const cells = gridCells(lat, lon, radius, n);
 
-  console.log(`[q100] WRI Aqueduct RP100 (${scenario.tag}) · bbox ±${radius} м · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+  console.log(`[q100] WRI Aqueduct RP100 (${scenario.tag}) · bbox ±${radius} m · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
   const [river, coast] = await Promise.all([
     sampleRaster(scenario.river, cells).catch(() => cells.map(() => null)),
     sampleRaster(scenario.coast, cells).catch(() => cells.map(() => null)),
@@ -77,7 +77,7 @@ async function computeScenario(
     hi: DEPTH_MAX_CM,
     alphaMin: 110,
     alphaMax: 220,
-    unit: 'см',
+    unit: 'cm',
     label: scenario.label,
     note: scenario.note,
   });

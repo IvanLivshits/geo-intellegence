@@ -37,13 +37,13 @@ export async function computeAirMask(ctx: MaskContext): Promise<MaskField> {
     alphaMin: 40,
     alphaMax: 190,
     unit: 'EAQI',
-    label: 'Воздух · European AQI',
+    label: 'Air · European AQI',
   };
 
   if (current == null || aqi == null || Number.isNaN(aqi)) {
     const field = makeField(new Array(n * n).fill(null), n, {
       ...spec,
-      note: 'Данные Open-Meteo Air Quality (CAMS) недоступны — значение не показано.',
+      note: 'Open-Meteo Air Quality (CAMS) data unavailable — no value shown.',
     });
     field.degraded = true;
     return field;
@@ -54,6 +54,6 @@ export async function computeAirMask(ctx: MaskContext): Promise<MaskField> {
 
   return makeField(new Array(n * n).fill(aqi), n, {
     ...spec,
-    note: `Ambient по CAMS (~11 км) — на масштабе района ~однороден. PM2.5 ${pm25} мкг/м³ · NO₂ ${no2} мкг/м³.`,
+    note: `Ambient from CAMS (~11 km) — roughly uniform at the neighbourhood scale. PM2.5 ${pm25} µg/m³ · NO₂ ${no2} µg/m³.`,
   });
 }

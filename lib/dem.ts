@@ -70,7 +70,7 @@ async function loadTileWindow(name: string, points: DemPoint[]): Promise<TileWin
       data: band instanceof Float32Array ? band : Float32Array.from(band as ArrayLike<number>),
     };
   } catch (err) {
-    console.warn(`[рельеф] тайл ${name} недоступен: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`[terrain] tile ${name} unavailable: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
@@ -91,7 +91,7 @@ export async function sampleElevations(points: DemPoint[]): Promise<(number | nu
       .digest('hex');
   const cached = await cacheGet<(number | null)[]>(key);
   if (cached != null) {
-    console.log('[рельеф] кэш ✓ Copernicus DEM');
+    console.log('[terrain] cache ✓ Copernicus DEM');
     return cached;
   }
 
@@ -103,7 +103,7 @@ export async function sampleElevations(points: DemPoint[]): Promise<(number | nu
     else byTile.set(name, [i]);
   });
 
-  console.log(`[рельеф] Copernicus GLO-30 · точек: ${points.length} · тайлов: ${byTile.size}`);
+  console.log(`[terrain] Copernicus GLO-30 · points: ${points.length} · tiles: ${byTile.size}`);
   const out: (number | null)[] = new Array(points.length).fill(null);
 
   await Promise.all(
@@ -115,7 +115,7 @@ export async function sampleElevations(points: DemPoint[]): Promise<(number | nu
   );
 
   const got = out.filter((v) => v != null).length;
-  console.log(`[рельеф] высоты получены: ${got}/${points.length}`);
+  console.log(`[terrain] elevations obtained: ${got}/${points.length}`);
   if (got > 0) await cacheSet(key, out, CACHE_TTL_MS);
   return out;
 }

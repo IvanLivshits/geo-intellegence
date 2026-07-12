@@ -21,3 +21,64 @@
   }
 }
 
+.memo-swatch {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+  .memo-canvas {
+    background: #ffffff !important;
+    min-height: 0 !important;
+  }
+  .memo-canvas > div {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  .memo-sheet {
+    box-shadow: none !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .memo-sheet section,
+  .memo-sheet header,
+  .memo-sheet footer {
+    break-inside: avoid;
+  }
+  .memo-sheet h1,
+  .memo-sheet h2 {
+    break-after: avoid;
+    break-inside: avoid;
+  }
+  .memo-sheet thead {
+    display: table-header-group;
+  }
+  .memo-sheet tr,
+  .memo-sheet li {
+    break-inside: avoid;
+  }
+  .memo-sheet table {
+    break-before: avoid;
+    break-inside: avoid;
+  }
+  .memo-sheet p {
+    orphans: 3;
+    widows: 3;
+  }
+  .memo-sheet .memo-sechead {
+    break-after: avoid;
+    break-inside: avoid;
+  }
+  .memo-sheet .memo-block {
+    break-inside: avoid;
+  }
+}

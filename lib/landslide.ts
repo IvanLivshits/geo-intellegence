@@ -15,7 +15,7 @@ const CACHE_TTL_MS = 90 * 24 * 3600 * 1000;
 const GRID_N = 48;
 
 const NOTE =
-  'NASA LHASA: восприимчивость склонов к оползням (уклон, геология, разломы, дороги, вырубка леса), ~1 км. Классы 1–5 показаны как 0–100%. Восприимчивость ≠ прогноз события. Сухо/ровно = прозрачно.';
+  'NASA LHASA: slope susceptibility to landslides (gradient, geology, faults, roads, deforestation), ~1 km. Classes 1–5 are shown as 0–100%. Susceptibility ≠ event forecast. Dry/flat = transparent.';
 
 export async function computeLandslideMask(ctx: MaskContext): Promise<MaskField> {
   const { lat, lon, radius } = ctx;
@@ -26,7 +26,7 @@ export async function computeLandslideMask(ctx: MaskContext): Promise<MaskField>
     createHash('sha1').update(`${lat.toFixed(5)},${lon.toFixed(5)},${radius},${ctx.zoneTag || ''}`).digest('hex');
   const cached = await cacheGet<MaskField>(key);
   if (cached != null) {
-    console.log('[оползни] кэш ✓ NASA LHASA');
+    console.log('[landslide] cache ✓ NASA LHASA');
     return cached;
   }
 
@@ -49,7 +49,7 @@ export async function computeLandslideMask(ctx: MaskContext): Promise<MaskField>
     alphaMin: 20,
     alphaMax: 220,
     unit: '%',
-    label: 'Оползни · NASA LHASA',
+    label: 'Landslides · NASA LHASA',
     note: NOTE,
   });
   await cacheSet(key, result, CACHE_TTL_MS);

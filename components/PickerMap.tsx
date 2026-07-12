@@ -217,7 +217,7 @@ export default function PickerMap({
             id: 'edge-labels',
             data: edges,
             getPosition: (d) => d.mid,
-            getText: (d) => `${Math.round(d.len)} м`,
+            getText: (d) => `${Math.round(d.len)} m`,
             getSize: 12,
             sizeUnits: 'pixels',
             getColor: [214, 218, 226, 240],
@@ -225,7 +225,7 @@ export default function PickerMap({
             getBackgroundColor: [12, 12, 11, 190],
             backgroundPadding: [4, 2, 4, 2],
             fontFamily: 'monospace',
-            characterSet: '0123456789 м',
+            characterSet: '0123456789 m',
             pickable: false,
           }),
         );

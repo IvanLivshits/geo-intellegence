@@ -15,7 +15,7 @@ export default function UserMenu({ user }: { user: SessionUser | null }) {
         onClick={() => signIn('google')}
         className="font-mono text-mono-label uppercase tracking-wider text-ash transition-colors hover:text-stellar-white"
       >
-        Войти
+        Sign in
       </button>
     );
   }
@@ -25,7 +25,7 @@ export default function UserMenu({ user }: { user: SessionUser | null }) {
   return (
     <a
       href="/account"
-      title="Личный кабинет"
+      title="Account"
       className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-graphite bg-charcoal font-mono text-mono-label text-stellar-white transition-colors hover:border-smoke"
     >
       {user.image ? (

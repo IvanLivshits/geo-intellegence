@@ -1,4 +1,4 @@
-import type { ActivityCategory, MaskKey } from './constants';
+import type { ActivityCategory, Band, MaskKey, MaskKind } from './constants';
 import type { MaskField } from './mask-field';
 
 export interface Building {
@@ -66,4 +66,52 @@ export interface GeocodeResult {
   lat: number;
   lon: number;
   displayName: string;
+}
+
+export interface RiskMemoEntry {
+  key: MaskKey;
+  label: string;
+  value: number | null;
+  range: [number, number] | null;
+  unit: string;
+  band: Band;
+  bandLabel: string;
+  verdict: string;
+  source: string;
+  license: string;
+  commercialOk: boolean;
+  kind: MaskKind;
+  kindLabel: string;
+  degraded: boolean;
+  note: string;
+}
+
+export interface RiskMemoNeighbour {
+  category: ActivityCategory;
+  label: string;
+  count: number;
+  nearest: number;
+  nearestKind: string;
+  nearestName: string | null;
+}
+
+export interface RiskMemoProvenanceItem {
+  label: string;
+  source: string;
+  license: string;
+  commercialOk: boolean;
+}
+
+export interface RiskMemo {
+  place: string;
+  center: [number, number];
+  zone: boolean;
+  generatedAt: string;
+  headline: string;
+  entries: RiskMemoEntry[];
+  scenario2050: RiskMemoEntry | null;
+  neighbours: RiskMemoNeighbour[];
+  provenance: Record<MaskKind, RiskMemoProvenanceItem[]>;
+  licensingFlags: string[];
+  completeness: { available: number; total: number };
 }

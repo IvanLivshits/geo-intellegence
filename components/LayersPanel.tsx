@@ -82,15 +82,15 @@ export default function LayersPanel({
           onClick={onBack}
           className="flex h-7 items-center px-2 font-mono text-mono-badge uppercase tracking-wider text-ash hover:text-stellar-white"
         >
-          {backLabel ?? '← Выбор зоны'}
+          {backLabel ?? '← Zone picker'}
         </button>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label={open ? 'Свернуть слои' : 'Развернуть слои'}
+          aria-label={open ? 'Collapse layers' : 'Expand layers'}
           className="flex h-7 items-center gap-1 px-2 font-mono text-mono-badge uppercase tracking-wider text-ash hover:text-stellar-white"
         >
-          Слои
+          Layers
           <ChevronDown size={13} className={cn('transition-transform', !open && '-rotate-90')} />
         </button>
       </div>
@@ -99,34 +99,34 @@ export default function LayersPanel({
         <div className="mt-1.5 flex flex-wrap items-center gap-1">
           <Chip
             on={layerOn.buildings}
-            label="Здания"
-            title={`${payload.buildings.length} зданий`}
+            label="Buildings"
+            title={`${payload.buildings.length} buildings`}
             onClick={() => onToggleLayer('buildings')}
           />
           <Chip
             on={layerOn.roads}
-            label="Дороги"
-            title={`${payload.roads.length} сегментов дорог и ж/д`}
+            label="Roads"
+            title={`${payload.roads.length} road and rail segments`}
             onClick={() => onToggleLayer('roads')}
           />
           {payload.powerLines.length > 0 && (
             <Chip
               on={layerOn.power}
-              label="ЛЭП"
-              title={`${payload.powerLines.length} линий`}
+              label="Power lines"
+              title={`${payload.powerLines.length} lines`}
               onClick={() => onToggleLayer('power')}
             />
           )}
           <Chip
             on={anyCat}
-            label="Активность"
-            title={`${payload.activity.length} источников`}
+            label="Activity"
+            title={`${payload.activity.length} sources`}
             onClick={onToggleActivityAll}
           />
           <button
             type="button"
             onClick={() => setCatsOpen((v) => !v)}
-            aria-label="Категории активности"
+            aria-label="Activity categories"
             className="flex h-7 w-6 items-center justify-center text-ash hover:text-stellar-white"
           >
             <ChevronRight size={13} className={cn('transition-transform', catsOpen && 'rotate-90')} />

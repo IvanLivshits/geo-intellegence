@@ -19,7 +19,7 @@ async function saveToCabinet(userId: string, meta: ShareMeta): Promise<void> {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[share] не удалось сохранить локацию в кабинет: ${message}`);
+    console.warn(`[share] failed to save the location to the account: ${message}`);
   }
 }
 
@@ -50,13 +50,13 @@ function markIp(ip: string): void {
 }
 
 export async function POST(request: Request) {
-  if (!sameOrigin(request)) return new NextResponse('Cross-origin запрещён', { status: 403 });
+  if (!sameOrigin(request)) return new NextResponse('Cross-origin forbidden', { status: 403 });
 
   const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
   if (ip) {
     const last = lastShareByIp.get(ip) || 0;
     if (Date.now() - last < RATE_WINDOW_MS) {
-      return new NextResponse('Слишком часто — подождите пару секунд', { status: 429 });
+      return new NextResponse('Too many requests — please wait a couple of seconds', { status: 429 });
     }
   }
 
@@ -64,11 +64,11 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return new NextResponse('Нужно JSON-тело', { status: 400 });
+    return new NextResponse('JSON body required', { status: 400 });
   }
 
   const input = validateScanInput(body.input);
-  if (!input) return new NextResponse('Некорректный input: нужны lat/lon или polygon', { status: 400 });
+  if (!input) return new NextResponse('Invalid input: lat/lon or polygon required', { status: 400 });
   const ui = body.ui ?? null;
   const label = input.label ?? null;
 
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     let payload = await getCachedScan(input);
     if (!payload) {
       return new NextResponse(
-        'Скан не найден в кэше — постройте карту и нажмите «Поделиться» ещё раз',
+        'Scan not found in cache — build the map and click “Share” again',
         { status: 409 },
       );
     }
@@ -120,6 +120,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ id, url: `/s/${id}` });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return new NextResponse('Ошибка: ' + message, { status: 500 });
+    return new NextResponse('Error: ' + message, { status: 500 });
   }
 }

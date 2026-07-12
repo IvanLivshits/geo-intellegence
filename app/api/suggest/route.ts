@@ -14,12 +14,12 @@ export async function GET(request: Request) {
   if (q.length < 3) return NextResponse.json([]);
 
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || '';
-  if (!key) return new NextResponse('Google-ключ не настроен', { status: 500 });
+  if (!key) return new NextResponse('Google API key is not configured', { status: 500 });
 
   try {
     const data = await fetchData('https://places.googleapis.com/v1/places:autocomplete', {
       method: 'POST',
-      body: JSON.stringify({ input: q, languageCode: 'ru' }),
+      body: JSON.stringify({ input: q, languageCode: 'en' }),
       headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': key },
       ttlMs: 24 * 3600 * 1000,
       retries: 0,
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
     return NextResponse.json(list);
   } catch (err) {
     console.warn(
-      `[suggest] Places API (New): ${err instanceof Error ? err.message : String(err)} — проверьте, что API включена и разрешена для ключа`,
+      `[suggest] Places API (New): ${err instanceof Error ? err.message : String(err)} — check that the API is enabled and allowed for the key`,
     );
     return NextResponse.json([]);
   }

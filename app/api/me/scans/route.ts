@@ -70,9 +70,9 @@ async function computeAndStore(
 }
 
 export async function POST(request: Request) {
-  if (!sameOrigin(request)) return new NextResponse('Cross-origin запрещён', { status: 403 });
+  if (!sameOrigin(request)) return new NextResponse('Cross-origin forbidden', { status: 403 });
   const session = await auth();
-  if (!session?.user?.id) return new NextResponse('Не авторизован', { status: 401 });
+  if (!session?.user?.id) return new NextResponse('Unauthorized', { status: 401 });
 
   const userId = session.user.id;
 
@@ -80,11 +80,11 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return new NextResponse('Нужно JSON-тело', { status: 400 });
+    return new NextResponse('JSON body required', { status: 400 });
   }
 
   const input = validateScanInput(body.input);
-  if (!input) return new NextResponse('Некорректный input: нужны lat/lon или polygon', { status: 400 });
+  if (!input) return new NextResponse('Invalid input: lat/lon or polygon required', { status: 400 });
 
   const label = input.label ?? null;
   const day = new Date().toISOString().slice(0, 10);
@@ -98,7 +98,7 @@ export async function POST(request: Request) {
   }
 
   if (tooSoon(userId)) {
-    return new NextResponse('Слишком часто — подождите пару секунд', { status: 429 });
+    return new NextResponse('Too many requests — please wait a couple of seconds', { status: 429 });
   }
 
   await createProcessingLocation(userId, {

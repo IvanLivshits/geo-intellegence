@@ -79,7 +79,7 @@ export default function SearchBar({ onSelect }: { onSelect: (point: SearchPoint)
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Поиск адреса или места…"
+        placeholder="Search address or place…"
         autoComplete="off"
         onKeyDown={handleKeyDown}
         onFocus={() => items.length && setOpen(true)}

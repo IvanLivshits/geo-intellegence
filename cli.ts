@@ -29,11 +29,11 @@ async function main() {
     lat = loc.lat;
     lon = loc.lon;
     label = loc.displayName;
-    console.log(`[геокод] ${query} → ${lat.toFixed(5)}, ${lon.toFixed(5)}`);
+    console.log(`[geocode] ${query} → ${lat.toFixed(5)}, ${lon.toFixed(5)}`);
   } else {
     console.error(
-      'Использование:\n' +
-        `  npm run scan -- "адрес" [--radius ${RADIUS}] [--out payload.json]\n` +
+      'Usage:\n' +
+        `  npm run scan -- "address" [--radius ${RADIUS}] [--out payload.json]\n` +
         `  npm run scan -- --lat=40.4168 --lon=-3.7038 [--radius ${RADIUS}]`,
     );
     process.exit(1);
@@ -45,13 +45,13 @@ async function main() {
   const payload = await computeScan({ lat, lon, radius, label });
   const m = payload.masks;
 
-  console.log(`\n[скан] ${label} · радиус ${radius} м · ${((Date.now() - t0) / 1000).toFixed(1)}с`);
+  console.log(`\n[scan] ${label} · radius ${radius} m · ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   console.log(
-    `  здания: ${payload.buildings.length} · дороги/ж-д: ${payload.roads.length} · активность: ${payload.activity.length}`,
+    `  buildings: ${payload.buildings.length} · roads/rail: ${payload.roads.length} · activity: ${payload.activity.length}`,
   );
-  console.log(`  шум:          ${m.noise.avg ?? '—'} ${m.noise.unit} (${m.noise.min ?? '—'}–${m.noise.max ?? '—'})`);
-  console.log(`  воздух:       ${m.air.avg ?? '—'} ${m.air.unit}`);
-  console.log(`  затопляемость: ${m.flood.avg ?? '—'}${m.flood.unit} (${m.flood.min ?? '—'}–${m.flood.max ?? '—'})`);
+  console.log(`  noise:      ${m.noise.avg ?? '—'} ${m.noise.unit} (${m.noise.min ?? '—'}–${m.noise.max ?? '—'})`);
+  console.log(`  air:        ${m.air.avg ?? '—'} ${m.air.unit}`);
+  console.log(`  flood risk: ${m.flood.avg ?? '—'}${m.flood.unit} (${m.flood.min ?? '—'}–${m.flood.max ?? '—'})`);
   console.log(`  · ${m.flood.note}`);
 
   if (values.out) {
@@ -62,6 +62,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`Ошибка: ${err instanceof Error ? err.message : String(err)}`);
+  console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
   process.exit(1);
 });
