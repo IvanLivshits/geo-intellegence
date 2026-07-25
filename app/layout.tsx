@@ -7,7 +7,7 @@ const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['400'], variable: '--
 
 export const metadata: Metadata = {
   title: 'Geo-Intelligence — 3D district risk scanner',
-  description: 'Noise, air quality and flood exposure of a district as data masks built from open data (OSM, CAMS, terrain).',
+  description: 'Noise, air quality and flood exposure of a district as data masks built from open data and Google Air Quality (OSM, Copernicus, JRC, Google).',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

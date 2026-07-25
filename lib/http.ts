@@ -10,7 +10,6 @@ const HOST_MIN_INTERVAL: Record<string, number> = {
   'overpass.osm.ch': 1500,
   'maps.mail.ru': 1500,
   'overpass.kumi.systems': 1500,
-  'air-quality-api.open-meteo.com': 400,
 };
 const lastCallByHost = new Map<string, number>();
 const hostChain = new Map<string, Promise<void>>();
