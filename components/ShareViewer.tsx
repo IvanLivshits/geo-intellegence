@@ -5,7 +5,7 @@ import type { Brand, ScanPayload, ShareMeta } from '@/lib/types';
 import { migratePayload } from '@/lib/schema';
 import MapView from './MapView';
 import UserMenu, { type SessionUser } from './UserMenu';
-import GenerateReportButton from './GenerateReportButton';
+import ReportButtons from './ReportButtons';
 
 function BrandMark({ brand }: { brand: Brand }) {
   return (
@@ -50,11 +50,13 @@ export default function ShareViewer({
   payloadUrl,
   user,
   brand,
+  isOwner,
 }: {
   meta: ShareMeta;
   payloadUrl: string;
   user: SessionUser | null;
   brand: Brand | null;
+  isOwner: boolean;
 }) {
   const [payload, setPayload] = useState<ScanPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +107,7 @@ export default function ShareViewer({
           </a>
         )}
         <div className="flex items-center gap-4">
-          <GenerateReportButton shareId={meta.id} />
+          {isOwner && <ReportButtons shareId={meta.id} />}
           <div className="font-mono text-mono-badge text-ash">snapshot from {date}</div>
           <UserMenu user={user} />
         </div>

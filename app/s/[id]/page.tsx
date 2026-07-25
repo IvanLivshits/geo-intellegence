@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { auth } from '@/auth';
 import { storagePublicUrl } from '@/lib/storage';
 import { payloadKey, readShareMeta } from '@/lib/share';
-import { resolveShareBrand } from '@/lib/user-store';
+import { ownerOfShare, resolveShareBrand } from '@/lib/user-store';
 import ShareViewer from '@/components/ShareViewer';
 
 export const dynamic = 'force-dynamic';
@@ -49,5 +49,15 @@ export default async function SharePage({ params }: { params: { id: string } }) 
     ? { name: session.user.name ?? null, image: session.user.image ?? null }
     : null;
   const brand = await resolveShareBrand(meta);
-  return <ShareViewer meta={meta} payloadUrl={payloadUrl} user={user} brand={brand} />;
+  const ownerId = meta.userId ?? (await ownerOfShare(params.id).catch(() => null));
+  const isOwner = Boolean(session?.user?.id && ownerId && session.user.id === ownerId);
+  return (
+    <ShareViewer
+      meta={meta}
+      payloadUrl={payloadUrl}
+      user={user}
+      brand={brand}
+      isOwner={isOwner}
+    />
+  );
 }
