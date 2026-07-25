@@ -129,7 +129,6 @@ export async function computeOvertureBuildings(input: {
 
   const cached = await cacheGet<OvertureResult>(cacheKey);
   if (cached != null) {
-    console.log('[buildings] cache ✓ Overture');
     return cached;
   }
 
@@ -140,7 +139,6 @@ export async function computeOvertureBuildings(input: {
     `WHERE bbox.xmin BETWEEN ${box.xmin} AND ${box.xmax} AND bbox.ymin BETWEEN ${box.ymin} AND ${box.ymax};`;
 
   const binary = join(process.cwd(), 'bin', 'duckdb');
-  console.log(`[buildings] Overture query · bbox ±${radius} m · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
 
   let stdout: string;
   try {
@@ -171,7 +169,6 @@ export async function computeOvertureBuildings(input: {
 
   const buildings = rowsToBuildings(geoRows, box);
   const result: OvertureResult = { buildings, count: buildings.length, note: NOTE };
-  console.log(`[buildings] Overture received · buildings: ${result.count}`);
 
   await cacheSet(cacheKey, result, CACHE_TTL_MS);
 
@@ -249,7 +246,6 @@ export async function computeOvertureWater(input: {
     createHash('sha1').update(`${lat.toFixed(5)},${lon.toFixed(5)},${radius}`).digest('hex');
   const cached = await cacheGet<{ lat: number; lon: number }[]>(key);
   if (cached != null) {
-    console.log('[water] cache ✓ Overture water');
     return cached;
   }
 
@@ -260,7 +256,6 @@ export async function computeOvertureWater(input: {
     `WHERE bbox.xmin <= ${east} AND bbox.xmax >= ${west} AND bbox.ymin <= ${north} AND bbox.ymax >= ${south};`;
 
   const binary = join(process.cwd(), 'bin', 'duckdb');
-  console.log(`[water] Overture query (S3 fallback) · bbox ±${radius} m · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
 
   const result = await execFileAsync(binary, ['-json', '-c', query], {
     timeout: 150000,
@@ -291,8 +286,6 @@ export async function computeOvertureWater(input: {
     capped = [];
     for (let i = 0; i < points.length; i += stride) capped.push(points[i]);
   }
-
-  console.log(`[water] Overture water · points: ${capped.length}`);
   await cacheSet(key, capped, CACHE_TTL_MS);
   return capped;
 }

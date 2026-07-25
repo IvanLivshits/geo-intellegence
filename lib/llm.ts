@@ -26,6 +26,7 @@ export interface ToolCallOptions {
   maxTokens: number;
   temperature?: number;
   webSearch?: number;
+  searchPrompt?: string;
   label?: string;
 }
 
@@ -126,7 +127,9 @@ export async function toolCall<T>(opts: ToolCallOptions): Promise<{ result: T; u
     usage: { include: true },
   };
   if (opts.webSearch && opts.webSearch > 0) {
-    body.plugins = [{ id: 'web', max_results: opts.webSearch }];
+    const web: Record<string, unknown> = { id: 'web', max_results: opts.webSearch };
+    if (opts.searchPrompt) web.search_prompt = opts.searchPrompt;
+    body.plugins = [web];
   }
 
   const response = await post(body, label);

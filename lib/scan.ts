@@ -8,6 +8,7 @@ import { computeOvertureBuildings } from './overture';
 import { computeAllMasks } from './masks';
 import { RADIUS, ZONE_HALF_MAX } from './constants';
 import { ringSelfIntersects } from './polygon';
+import { PAYLOAD_VERSION } from './schema';
 import type { Building, Road, ScanPayload } from './types';
 
 interface Box {
@@ -184,7 +185,7 @@ function payloadCacheKey(input: ScanInput): string {
     input.polygon && input.polygon.length >= 3
       ? 'poly:' + input.polygon.map(([la, lo]) => `${la.toFixed(6)},${lo.toFixed(6)}`).join(';')
       : `pt:${input.lat.toFixed(6)},${input.lon.toFixed(6)},${input.radius ?? RADIUS}`;
-  return 'scanres:' + createHash('sha1').update(canonical).digest('hex');
+  return `scanres:v${PAYLOAD_VERSION}:` + createHash('sha1').update(canonical).digest('hex');
 }
 
 export function getCachedScan(input: ScanInput): Promise<ScanPayload | null> {
@@ -198,7 +199,6 @@ export function computeScan(input: ScanInput): Promise<ScanPayload> {
   const label = input.label ?? null;
   let shared = inflightScans.get(cacheKey);
   if (shared) {
-    console.log('[map] computation already running — reusing the result');
   } else {
     shared = computeScanInner(input);
     inflightScans.set(cacheKey, shared);
@@ -218,7 +218,6 @@ async function computeScanInner(input: ScanInput): Promise<ScanPayload> {
   const cacheKey = payloadCacheKey(input);
   const cachedPayload = await cacheGet<ScanPayload>(cacheKey);
   if (cachedPayload != null) {
-    console.log('[map] cache ✓ ready payload');
     return { ...cachedPayload, label };
   }
 
@@ -336,6 +335,7 @@ async function computeScanInner(input: ScanInput): Promise<ScanPayload> {
   );
 
   const payload: ScanPayload = {
+    version: PAYLOAD_VERSION,
     center: [lon, lat],
     radius,
     zone: input.polygon && input.polygon.length >= 3

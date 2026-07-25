@@ -4,7 +4,8 @@ import { MASK_META, type MaskKey } from './constants';
 import { computeNoiseMask } from './noise-mask';
 import { computeAirMask } from './air';
 import { computeFloodMask } from './flood';
-import { computeOfficialFloodMask, computeOfficialFloodFutureMask } from './official-flood';
+import { computeOfficialFloodMask } from './official-flood';
+import { computeCoastalMask } from './coastal';
 import { computePluvialMask } from './pluvial';
 import { computeLandslideMask } from './landslide';
 
@@ -24,7 +25,7 @@ const MASK_PROVIDERS: Record<MaskKey, MaskCompute> = {
   air: computeAirMask,
   flood: computeFloodMask,
   q100: computeOfficialFloodMask,
-  q100f: computeOfficialFloodFutureMask,
+  coastal: computeCoastalMask,
   pluvial: computePluvialMask,
   landslide: computeLandslideMask,
 };

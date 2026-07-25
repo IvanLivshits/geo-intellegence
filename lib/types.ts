@@ -25,6 +25,7 @@ export interface ActivitySource {
 }
 
 export interface ScanPayload {
+  version: number;
   center: [number, number];
   radius: number;
   zone?: [number, number][];
@@ -36,10 +37,17 @@ export interface ScanPayload {
   masks: Record<MaskKey, MaskField>;
 }
 
+export interface Brand {
+  name: string;
+  logo: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+}
+
 export interface ShareUiState {
   activeMask?: MaskKey | null;
   topView?: boolean;
-  scenario2050?: boolean;
 }
 
 export interface ShareInput {
@@ -60,6 +68,8 @@ export interface ShareMeta {
   createdAt: string;
   ui: ShareUiState | null;
   stats: { noise: number | null; q100: number | null; pluvial: number | null };
+  brand?: Brand;
+  userId?: string | null;
 }
 
 export interface GeocodeResult {
@@ -109,9 +119,9 @@ export interface RiskMemo {
   generatedAt: string;
   headline: string;
   entries: RiskMemoEntry[];
-  scenario2050: RiskMemoEntry | null;
   neighbours: RiskMemoNeighbour[];
   provenance: Record<MaskKind, RiskMemoProvenanceItem[]>;
   licensingFlags: string[];
   completeness: { available: number; total: number };
+  overall: Band;
 }

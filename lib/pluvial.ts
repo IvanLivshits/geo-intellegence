@@ -4,7 +4,7 @@ import { makeField, type MaskField } from './mask-field';
 import { clipToZone, pointInZone } from './polygon';
 import { PLUVIAL_RAMP } from './constants';
 import type { MaskContext } from './masks';
-import type { OsmElement, OsmGeometryPoint } from './noise-model';
+import { buildingRings, inAnyBuilding } from './buildings';
 
 const GRID_N = 48;
 const POND_MAX_CM = 100;
@@ -13,69 +13,6 @@ const MISSING_TOLERANCE = 0.2;
 
 const NOTE =
   'Stormwater ponding model: filling of local terrain depressions (Copernicus DEM GLO-30). Shows where water will pool during heavy rainfall, WITHOUT accounting for storm drainage. Depressions deeper than 3 m are discarded as built-up artefacts, so genuinely deep sinks (underpasses, quarries) are not reported. Indicative only — the terrain model is a surface model, so values in dense built-up areas are approximate. NOT an official hazard map.';
-
-interface Ring {
-  pts: [number, number][];
-  xmin: number;
-  xmax: number;
-  ymin: number;
-  ymax: number;
-}
-
-function toRing(geom: OsmGeometryPoint[] | undefined): Ring | null {
-  if (!Array.isArray(geom) || geom.length < 3) return null;
-  const pts: [number, number][] = geom.map((p) => [p.lon, p.lat]);
-  let xmin = Infinity;
-  let xmax = -Infinity;
-  let ymin = Infinity;
-  let ymax = -Infinity;
-  for (const [x, y] of pts) {
-    if (x < xmin) xmin = x;
-    if (x > xmax) xmax = x;
-    if (y < ymin) ymin = y;
-    if (y > ymax) ymax = y;
-  }
-  return { pts, xmin, xmax, ymin, ymax };
-}
-
-function buildingRings(els: OsmElement[] | undefined): Ring[] {
-  if (!Array.isArray(els)) return [];
-  const rings: Ring[] = [];
-  for (const el of els) {
-    if (!el.tags?.building) continue;
-    if (el.type === 'way') {
-      const r = toRing(el.geometry);
-      if (r) rings.push(r);
-    } else if (el.type === 'relation' && Array.isArray(el.members)) {
-      for (const m of el.members) {
-        if (m.type === 'way' && (m.role === 'outer' || !m.role)) {
-          const r = toRing(m.geometry);
-          if (r) rings.push(r);
-        }
-      }
-    }
-  }
-  return rings;
-}
-
-function insideRing(x: number, y: number, r: Ring): boolean {
-  if (x < r.xmin || x > r.xmax || y < r.ymin || y > r.ymax) return false;
-  let inside = false;
-  const p = r.pts;
-  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
-    const [xi, yi] = p[i];
-    const [xj, yj] = p[j];
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi + 0) + xi) inside = !inside;
-  }
-  return inside;
-}
-
-function inAnyBuilding(x: number, y: number, rings: Ring[]): boolean {
-  for (const r of rings) {
-    if (insideRing(x, y, r)) return true;
-  }
-  return false;
-}
 
 function fillDepressions(elevs: (number | null)[], n: number): number[] {
   const filled = new Array<number>(n * n);
@@ -118,6 +55,24 @@ function fillDepressions(elevs: (number | null)[], n: number): number[] {
   return filled;
 }
 
+function pondingAtAsset(groundDepth: (number | null)[], n: number): number | null {
+  const c = Math.floor(n / 2);
+  for (const rad of [1, 2, 4]) {
+    const vals: number[] = [];
+    for (let r = Math.max(0, c - rad); r <= Math.min(n - 1, c + rad); r++) {
+      for (let col = Math.max(0, c - rad); col <= Math.min(n - 1, c + rad); col++) {
+        const d = groundDepth[r * n + col];
+        if (d != null) vals.push(d);
+      }
+    }
+    if (vals.length) {
+      vals.sort((a, b) => a - b);
+      return Math.round(vals[Math.floor(vals.length / 2)]);
+    }
+  }
+  return null;
+}
+
 export async function computePluvialMask(ctx: MaskContext): Promise<MaskField> {
   const { lat, lon, radius } = ctx;
   const n = GRID_N;
@@ -140,13 +95,16 @@ export async function computePluvialMask(ctx: MaskContext): Promise<MaskField> {
   const filled = fillDepressions(elevs, n);
 
   const values: (number | null)[] = new Array(n * n).fill(null);
+  const groundDepth: (number | null)[] = new Array(n * n).fill(null);
   for (let i = 0; i < n * n; i++) {
     if (onBuilding[i]) continue;
     const e = elevs[i];
     if (e == null || !Number.isFinite(filled[i])) continue;
     const pondCm = (filled[i] - e) * 100;
-    if (pondCm <= 1 || pondCm > ARTIFACT_CM) continue;
-    values[i] = Math.min(pondCm, POND_MAX_CM);
+    if (pondCm > ARTIFACT_CM) continue;
+    const depth = pondCm <= 1 ? 0 : Math.min(pondCm, POND_MAX_CM);
+    groundDepth[i] = depth;
+    if (depth > 0) values[i] = depth;
   }
 
   const clipped = clipToZone(values, n, radius, ctx.zone);
@@ -181,10 +139,6 @@ export async function computePluvialMask(ctx: MaskContext): Promise<MaskField> {
   const tooIncomplete = !terrainMissing && missingRatio > MISSING_TOLERANCE;
   const incompletePct = Math.round(missingRatio * 100);
 
-  console.log(
-    `[pluvial] buildings: ${rings.length} rings · in-zone cells: ${zoneCells} (ground ${ground} · rooftop ${rooftop} · no terrain ${noTerrain})`,
-  );
-
   let note = NOTE;
   if (terrainMissing) {
     note = `NOT ASSESSED: terrain data (Copernicus DEM) could not be retrieved for this area, so ponding was not modelled. ${NOTE}`;
@@ -207,5 +161,26 @@ export async function computePluvialMask(ctx: MaskContext): Promise<MaskField> {
     note,
   });
   if (terrainMissing || allRooftop || tooIncomplete) field.degraded = true;
+
+  let sum = 0;
+  let count = 0;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < n * n; i++) {
+    if (!inZone[i]) continue;
+    const d = groundDepth[i];
+    if (d == null) continue;
+    sum += d;
+    count++;
+    if (d < lo) lo = d;
+    if (d > hi) hi = d;
+  }
+  if (count > 0) {
+    field.avg = Math.round(sum / count);
+    field.min = Math.round(lo);
+    field.max = Math.round(hi);
+  }
+  field.site = pondingAtAsset(groundDepth, n);
+
   return field;
 }

@@ -3,7 +3,7 @@ import { auth } from '@/auth';
 import { getCachedScan } from '@/lib/scan';
 import { storagePut } from '@/lib/storage';
 import { computeShareId, metaKey, payloadKey, readShareMeta, validateScanInput } from '@/lib/share';
-import { saveLocation } from '@/lib/user-store';
+import { getBrand, saveLocation } from '@/lib/user-store';
 import { sameOrigin } from '@/lib/csrf';
 import type { ShareInput, ShareMeta, ShareUiState } from '@/lib/types';
 
@@ -80,8 +80,28 @@ export async function POST(request: Request) {
 
   const existing = await readShareMeta(id);
   if (existing) {
+    let dirty = false;
     if (JSON.stringify(existing.ui) !== JSON.stringify(ui)) {
       existing.ui = ui;
+      dirty = true;
+    }
+    if (userId && (!existing.userId || existing.userId === userId)) {
+      if (!existing.userId) {
+        existing.userId = userId;
+        dirty = true;
+      }
+      let brand: Awaited<ReturnType<typeof getBrand>> = null;
+      try {
+        brand = await getBrand(userId);
+      } catch {
+        brand = null;
+      }
+      if (brand && JSON.stringify(existing.brand ?? null) !== JSON.stringify(brand)) {
+        existing.brand = brand;
+        dirty = true;
+      }
+    }
+    if (dirty) {
       await storagePut(metaKey(id), Buffer.from(JSON.stringify(existing)), 'application/json');
     }
     if (userId) await saveToCabinet(userId, existing);
@@ -98,8 +118,17 @@ export async function POST(request: Request) {
       );
     }
     if (input.label) payload = { ...payload, label: input.label };
+    let brand: Awaited<ReturnType<typeof getBrand>> = null;
+    if (userId) {
+      try {
+        brand = await getBrand(userId);
+      } catch {
+        brand = null;
+      }
+    }
     const meta: ShareMeta = {
       id,
+      userId,
       input,
       ui,
       label: input.label ?? payload.label,
@@ -112,6 +141,7 @@ export async function POST(request: Request) {
         q100: payload.masks.q100.avg,
         pluvial: payload.masks.pluvial.avg,
       },
+      ...(brand ? { brand } : {}),
     };
     await storagePut(payloadKey(id), Buffer.from(JSON.stringify(payload)), 'application/json');
     await storagePut(metaKey(id), Buffer.from(JSON.stringify(meta)), 'application/json');

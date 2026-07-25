@@ -1,6 +1,6 @@
 import 'server-only';
 import { query } from './db';
-import type { ShareInput } from './types';
+import type { Brand, ShareInput, ShareMeta } from './types';
 
 export interface DbUser {
   id: string;
@@ -42,6 +42,58 @@ export async function upsertUser(u: {
     [u.googleSub, u.email, u.name, u.image],
   );
   return rows[0];
+}
+
+interface BrandRow {
+  brand_name: string | null;
+  brand_logo: string | null;
+  brand_phone: string | null;
+  brand_email: string | null;
+  brand_website: string | null;
+}
+
+export async function getBrand(userId: string): Promise<Brand | null> {
+  const rows = await query<BrandRow>(
+    `SELECT brand_name, brand_logo, brand_phone, brand_email, brand_website
+     FROM users WHERE id = $1`,
+    [userId],
+  );
+  const r = rows[0];
+  if (!r || !r.brand_name) return null;
+  return {
+    name: r.brand_name,
+    logo: r.brand_logo,
+    phone: r.brand_phone,
+    email: r.brand_email,
+    website: r.brand_website,
+  };
+}
+
+export async function ownerOfShare(shareId: string): Promise<string | null> {
+  const rows = await query<{ user_id: string }>(
+    `SELECT user_id FROM locations WHERE share_id = $1 ORDER BY created_at ASC LIMIT 1`,
+    [shareId],
+  );
+  return rows[0]?.user_id ?? null;
+}
+
+export async function resolveShareBrand(meta: ShareMeta): Promise<Brand | null> {
+  const ownerId = meta.userId ?? (await ownerOfShare(meta.id).catch(() => null));
+  const live = ownerId ? await getBrand(ownerId).catch(() => null) : null;
+  return live ?? meta.brand ?? null;
+}
+
+export async function setBrand(userId: string, brand: Brand): Promise<void> {
+  await query(
+    `UPDATE users
+       SET brand_name = $2,
+           brand_logo = $3,
+           brand_phone = $4,
+           brand_email = $5,
+           brand_website = $6
+     WHERE id = $1`,
+    [userId, brand.name, brand.logo, brand.phone, brand.email, brand.website],
+  );
 }
 
 export async function saveLocation(

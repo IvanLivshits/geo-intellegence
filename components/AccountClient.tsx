@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { signOut } from 'next-auth/react';
-import { Button } from '@/components/ui/button';
+import UserMenu from './UserMenu';
 import { cn } from '@/lib/utils';
 import type { ShareInput } from '@/lib/types';
 import { starfieldUri } from './cosmicArt';
@@ -320,8 +319,6 @@ export default function AccountClient({
   const start = page * pageSize;
   const visible = locations.slice(start, start + pageSize);
 
-  const initialLetter = (user.name?.trim()?.[0] ?? user.email?.trim()?.[0] ?? '?').toUpperCase();
-
   async function saveRename(id: string) {
     const name = editValue.trim();
     if (!name) {
@@ -392,22 +389,7 @@ export default function AccountClient({
         >
           ← [ GEO-INTELLIGENCE ]
         </a>
-        <div className="flex items-center gap-4">
-          <div className="hidden items-center gap-2.5 sm:flex">
-            <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-graphite bg-charcoal font-mono text-mono-badge text-stellar-white">
-              {user.image ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.image} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-              ) : (
-                initialLetter
-              )}
-            </div>
-            <div className="font-mono text-mono-badge text-ash">{user.name || user.email}</div>
-          </div>
-          <Button variant="nav" onClick={() => signOut({ callbackUrl: '/' })}>
-            Sign out
-          </Button>
-        </div>
+        <UserMenu user={{ name: user.name, image: user.image }} />
       </header>
 
       <main className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col overflow-hidden px-5 py-5">
@@ -415,9 +397,11 @@ export default function AccountClient({
           <h1 className="font-mono text-mono-label uppercase tracking-wider text-ash">
             Saved locations
           </h1>
-          <span className="font-mono text-mono-badge text-smoke">
-            {total > 0 ? `${rangeFrom}–${rangeTo} of ${total}` : '0'}
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="font-mono text-mono-badge text-smoke">
+              {total > 0 ? `${rangeFrom}–${rangeTo} of ${total}` : '0'}
+            </span>
+          </div>
         </div>
 
         {error && (

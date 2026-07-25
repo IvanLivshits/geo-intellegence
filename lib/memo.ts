@@ -2,9 +2,12 @@ import { kindLabelOf } from './activity-sources';
 import {
   MASK_META,
   ACTIVITY_CATEGORIES,
+  AMENITY_KEYS,
   BAND_LABEL,
+  BAND_RANK,
   KIND_LABEL,
   classifyBand,
+  type Band,
   type MaskKey,
   type MaskKind,
   type ActivityCategory,
@@ -23,8 +26,8 @@ function entryFor(key: MaskKey, payload: ScanPayload): RiskMemoEntry {
   const meta = MASK_META[key];
   const field = payload.masks[key];
   const degraded = !field || Boolean(field.degraded);
-  const avg = field?.avg ?? null;
-  const { band, verdict } = classifyBand(meta, avg, degraded);
+  const value = field ? (field.site !== undefined ? field.site : (field.avg ?? null)) : null;
+  const { band, verdict } = classifyBand(meta, value, degraded);
   const range =
     field && field.min != null && field.max != null && field.min !== field.max
       ? ([field.min, field.max] as [number, number])
@@ -32,7 +35,7 @@ function entryFor(key: MaskKey, payload: ScanPayload): RiskMemoEntry {
   return {
     key,
     label: meta.label,
-    value: avg,
+    value,
     range,
     unit: meta.unit,
     band,
@@ -44,7 +47,7 @@ function entryFor(key: MaskKey, payload: ScanPayload): RiskMemoEntry {
     kind: meta.kind,
     kindLabel: KIND_LABEL[meta.kind],
     degraded,
-    note: '',
+    note: field?.siteNote ?? '',
   };
 }
 
@@ -90,11 +93,24 @@ function buildNeighbours(payload: ScanPayload): RiskMemoNeighbour[] {
     .sort((a, b) => a.nearest - b.nearest);
 }
 
+function overallBand(entries: RiskMemoEntry[]): Band {
+  const rated = entries.filter((e) => e.band !== 'unknown');
+  if (!rated.length) return 'unknown';
+  let top: Band = 'low';
+  for (const e of rated) {
+    const isAmenity = AMENITY_KEYS.includes(e.key);
+    const counts = isAmenity ? BAND_RANK[e.band] >= BAND_RANK.high : true;
+    if (counts && BAND_RANK[e.band] > BAND_RANK[top]) top = e.band;
+  }
+  const hazardUnassessed = entries.some(
+    (e) => e.band === 'unknown' && !AMENITY_KEYS.includes(e.key),
+  );
+  if (hazardUnassessed && BAND_RANK[top] <= BAND_RANK.moderate) return 'unknown';
+  return top;
+}
+
 export function buildMemo(payload: ScanPayload, opts?: { now?: string }): RiskMemo {
   const entries = VISIBLE.map((k) => entryFor(k, payload));
-
-  const q100fField = payload.masks.q100f;
-  const scenario2050 = q100fField ? entryFor('q100f', payload) : null;
 
   const provenance: Record<MaskKind, RiskMemoProvenanceItem[]> = {
     measured: [],
@@ -127,10 +143,10 @@ export function buildMemo(payload: ScanPayload, opts?: { now?: string }): RiskMe
     generatedAt: opts?.now ?? new Date().toISOString(),
     headline: buildHeadline(entries),
     entries,
-    scenario2050,
     neighbours: buildNeighbours(payload),
     provenance,
     licensingFlags,
     completeness: { available, total: entries.length },
+    overall: overallBand(entries),
   };
 }

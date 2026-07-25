@@ -1,94 +1,103 @@
-import { fromUrl } from 'geotiff';
+import { fromFile } from 'geotiff';
 import { createHash } from 'node:crypto';
 import { gridCells } from './geo-math';
 import { cacheGet, cacheSet } from './cache';
+import { ensureRaster } from './raster-cache';
 import { sampleImageAt } from './raster';
 import { makeField, type MaskField } from './mask-field';
 import { clipToZone } from './polygon';
 import { Q100_RAMP } from './constants';
 import type { MaskContext } from './masks';
 
-const BASE = 'http://wri-projects.s3.amazonaws.com/AqueductFloodTool/download/v2';
-const SCENARIOS = {
-  now: {
-    tag: 'v2',
-    river: `${BASE}/inunriver_historical_000000000WATCH_1980_rp00100.tif`,
-    coast: `${BASE}/inuncoast_historical_wtsub_hist_rp0100_0.tif`,
-    label: 'Flood Q100 · WRI',
-    note: 'Official global model: WRI Aqueduct (GLOFRIS) — depth of a "once in 100 years" flood, max(riverine, coastal including land subsidence). Resolution ~1 km, WITHOUT local engineered defences. Rainfall/drainage are not included — see the "River flood risk" and "Pluvial flooding" masks.',
-  },
-  future2050: {
-    tag: 'f2050',
-    river: `${BASE}/inunriver_rcp8p5_00000NorESM1-M_2050_rp00100.tif`,
-    coast: `${BASE}/inuncoast_rcp8p5_wtsub_2050_rp0100_0.tif`,
-    label: 'Flood Q100 · 2050 · WRI',
-    note: 'Climate scenario for 2050 (RCP 8.5, NorESM1-M model): depth of a 100-year flood under a pessimistic emissions trajectory, max(riverine, coastal with subsidence). WRI Aqueduct, ~1 km, without local defences. Compare with today\'s Q100: values can be both higher and LOWER than today\'s — climate shifts precipitation in both directions (the Mediterranean, for instance, is drying out).',
-  },
-} as const;
+const RP100_URL =
+  'https://jeodpp.jrc.ec.europa.eu/ftp/jrc-opendata/FLOODS/GlobalMaps/floodMapGL_rp100y.zip';
+const RP100_FILE = 'jrc-floodmap-rp100y.tif';
 
 const CACHE_TTL_MS = 30 * 24 * 3600 * 1000;
 const GRID_N = 48;
 const DEPTH_MAX_CM = 300;
 
-async function sampleRaster(
-  url: string,
-  cells: { lat: number; lon: number }[],
-): Promise<(number | null)[]> {
-  const tiff = await fromUrl(url);
-  const image = await tiff.getImage();
-  return sampleImageAt(image, cells);
+const NOTE =
+  'JRC Global River Flood Hazard Map (Copernicus Emergency Management Service): depth of the 1-in-100-year river flood, modelled with LISFLOOD / LISFLOOD-FP at ~1 km. Riverine flooding only — coastal storm surge is NOT included, so a low value here does not rule out coastal inundation. Local engineered defences are not modelled.';
+
+let imagePromise: Promise<import('geotiff').GeoTIFFImage> | null = null;
+
+function floodImage(): Promise<import('geotiff').GeoTIFFImage> {
+  if (!imagePromise) {
+    imagePromise = (async () => {
+      const path = await ensureRaster(RP100_URL, RP100_FILE, true);
+      const tiff = await fromFile(path);
+      return tiff.getImage();
+    })().catch((err) => {
+      imagePromise = null;
+      throw err;
+    });
+  }
+  return imagePromise;
 }
 
-async function computeScenario(
-  ctx: MaskContext,
-  scenario: (typeof SCENARIOS)[keyof typeof SCENARIOS],
-): Promise<MaskField> {
+export async function computeOfficialFloodMask(ctx: MaskContext): Promise<MaskField> {
   const { lat, lon, radius } = ctx;
   const n = GRID_N;
 
   const key =
-    'q100:' +
+    'q100jrc:' +
     createHash('sha1')
-      .update(`${lat.toFixed(5)},${lon.toFixed(5)},${radius},${scenario.tag},${ctx.zoneTag || ''}`)
+      .update(`${lat.toFixed(5)},${lon.toFixed(5)},${radius},${ctx.zoneTag || ''}`)
       .digest('hex');
   const cached = await cacheGet<MaskField>(key);
-  if (cached != null) {
-    console.log(`[q100] cache ✓ WRI Aqueduct (${scenario.tag})`);
-    return cached;
-  }
+  if (cached != null) return cached;
 
   const cells = gridCells(lat, lon, radius, n);
 
-  console.log(`[q100] WRI Aqueduct RP100 (${scenario.tag}) · bbox ±${radius} m · ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
-  const [river, coast] = await Promise.all([
-    sampleRaster(scenario.river, cells).catch(() => cells.map(() => null)),
-    sampleRaster(scenario.coast, cells).catch(() => cells.map(() => null)),
-  ]);
+  let values: (number | null)[];
+  let failed = false;
+  let uncovered = 0;
+  try {
+    const image = await floodImage();
+    const depths = await sampleImageAt(image, cells);
+    values = depths.map((d) => {
+      if (d == null || !Number.isFinite(d)) {
+        uncovered++;
+        return null;
+      }
+      if (d <= 0) return 0;
+      return Math.min(d * 100, DEPTH_MAX_CM);
+    });
+  } catch (err) {
+    failed = true;
+    values = cells.map(() => null);
+    console.warn(`[q100] JRC flood map unavailable: ${err instanceof Error ? err.message : String(err)}`);
+  }
 
-  const values: (number | null)[] = cells.map((_, i) => {
-    const depth = Math.max(river[i] ?? 0, coast[i] ?? 0);
-    if (depth <= 0) return null;
-    return Math.min(depth * 100, DEPTH_MAX_CM);
-  });
+  const noCoverage = !failed && uncovered === cells.length;
+  const centerIdx = Math.floor(n / 2) * n + Math.floor(n / 2);
+  const site = values[centerIdx];
+  const assetUncovered = !failed && !noCoverage && site == null;
 
-  const result = makeField(clipToZone(values, n, radius, ctx.zone), n, {
+  const field = makeField(clipToZone(values, n, radius, ctx.zone), n, {
     ramp: Q100_RAMP,
     lo: 0,
     hi: DEPTH_MAX_CM,
-    alphaMin: 110,
+    alphaMin: 0,
     alphaMax: 220,
     unit: 'cm',
-    label: scenario.label,
-    note: scenario.note,
+    label: 'River flood Q100 · JRC',
+    site,
+    note: failed
+      ? `NOT ASSESSED: the JRC flood map could not be retrieved, so this location was never checked against the 100-year flood zone. ${NOTE}`
+      : noCoverage
+        ? `NOT ASSESSED: this location lies outside the modelled domain of the JRC flood map, so it was never checked. ${NOTE}`
+        : assetUncovered
+          ? `NOT ASSESSED: the asset itself lies outside the modelled JRC domain (only part of the scan area is covered), so its river-flood exposure was not established. ${NOTE}`
+          : NOTE,
   });
-  await cacheSet(key, result, CACHE_TTL_MS);
-  return result;
-}
 
-export function computeOfficialFloodMask(ctx: MaskContext): Promise<MaskField> {
-  return computeScenario(ctx, SCENARIOS.now);
-}
+  if (failed || noCoverage || assetUncovered) {
+    field.degraded = true;
+    return field;
+  }
 
-export function computeOfficialFloodFutureMask(ctx: MaskContext): Promise<MaskField> {
-  return computeScenario(ctx, SCENARIOS.future2050);
+  await cacheSet(key, field, CACHE_TTL_MS);
+  return field;
 }

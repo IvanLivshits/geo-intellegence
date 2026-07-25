@@ -4,18 +4,18 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-sans font-normal leading-none transition-colors focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap font-sans font-normal leading-none transition-colors focus-visible:outline-none focus-visible:shadow-focus disabled:pointer-events-none disabled:opacity-40',
   {
     variants: {
       variant: {
-        nav: 'border border-stellar-white bg-transparent text-stellar-white hover:text-ash hover:border-ash',
-        ghost: 'border border-smoke bg-transparent text-stellar-white hover:border-stellar-white',
-        icon: 'border border-graphite bg-void-black text-stellar-white hover:border-signal-blue',
+        nav: 'border-2 border-stellar-white bg-transparent text-stellar-white hover:text-ash hover:border-ash',
+        ghost: 'border-2 border-smoke bg-transparent text-stellar-white hover:border-stellar-white',
+        icon: 'border-2 border-graphite bg-void-black text-stellar-white hover:border-signal-blue',
       },
       size: {
-        default: 'h-10 px-5 text-[14px]',
-        sm: 'h-8 px-3 text-mono-badge',
-        icon: 'h-10 w-10 p-0',
+        default: 'h-10 px-5 text-[14px] rounded-full',
+        sm: 'h-8 px-3 text-mono-badge rounded-full',
+        icon: 'h-10 w-10 p-0 rounded-full',
       },
     },
     defaultVariants: {

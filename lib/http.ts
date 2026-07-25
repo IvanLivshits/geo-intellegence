@@ -65,8 +65,7 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
     if (opts.validate && !opts.validate(cached)) {
       console.warn(`[net] cached response for ${host} is unusable — ignoring it and refetching`);
     } else {
-      console.log(`[net] cache ✓ ${host}`);
-      return cached;
+        return cached;
     }
   }
 
@@ -77,7 +76,6 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), timeoutMs);
       const started = Date.now();
-      console.log(`[net] ${method} ${host} …${attempt ? ` (attempt ${attempt + 1})` : ''}`);
       const res = await fetch(url, {
         method,
         body,
@@ -102,7 +100,6 @@ export async function fetchData(url: string, opts: FetchOptions = {}): Promise<a
         err.emptyDataset = true;
         throw err;
       }
-      console.log(`[net] ✓ ${host} · ${Date.now() - started} ms`);
       await cacheSet(`http:${key}`, data, ttlMs);
       return data;
     } catch (err) {

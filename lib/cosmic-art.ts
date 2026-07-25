@@ -16,7 +16,17 @@ const ISO_X = 0.866;
 const ISO_Y = 0.5;
 const Z_EXAGGERATE = 1.25;
 
-function isoCity(payload: ScanPayload, meta: ShareMeta, cx: number, cy: number, r: number): string {
+function isoCity(
+  payload: ScanPayload,
+  meta: ShareMeta,
+  cx: number,
+  cy: number,
+  r: number,
+  clipId = 'bubbleClip',
+  showRoads = false,
+  fitAll = false,
+  outBounds?: { x0: number; y0: number; x1: number; y1: number },
+): string {
   const [clon, clat] = payload.center;
   const all = payload.buildings.map((b) => ({
     pts: b.polygon.map(([lo, la]) => localMetres(clat, clon, la, lo)),
@@ -36,6 +46,8 @@ function isoCity(payload: ScanPayload, meta: ShareMeta, cx: number, cy: number, 
         }),
       ) + 40,
     );
+  } else if (fitAll) {
+    half = payload.radius;
   } else {
     half = Math.min(payload.radius, 330);
     for (const trial of [330, 500, 700, payload.radius]) {
@@ -68,9 +80,10 @@ function isoCity(payload: ScanPayload, meta: ShareMeta, cx: number, cy: number, 
       h: Math.min(b.height, 70) * Z_EXAGGERATE,
     });
   }
+  const cap = fitAll ? 1500 : 420;
   const buildings =
-    items.length > 420
-      ? [...items].sort((a, b) => footprintArea(b.ground) - footprintArea(a.ground)).slice(0, 420)
+    items.length > cap
+      ? [...items].sort((a, b) => footprintArea(b.ground) - footprintArea(a.ground)).slice(0, cap)
       : items;
   buildings.sort((a, b) => a.depth - b.depth);
 
@@ -121,6 +134,20 @@ function isoCity(payload: ScanPayload, meta: ShareMeta, cx: number, cy: number, 
     );
   }
 
+  if (showRoads) {
+    for (const rd of payload.roads) {
+      const local = rd.path.map(([lo, la]) => localMetres(clat, clon, la, lo));
+      if (!inBox(local, half)) continue;
+      const screen = local.map((p) => toScreen(p, 0));
+      const w = Math.max(0.7, Math.min(rd.width * scale, rd.rail ? 3 : 3.5));
+      const stroke = rd.rail ? '#6b7284' : '#8f97a6';
+      const dash = rd.rail ? ' stroke-dasharray="4 3"' : '';
+      parts.push(
+        `<polyline points="${fmt(screen)}" fill="none" stroke="${stroke}" stroke-width="${w.toFixed(1)}" stroke-linecap="round" stroke-linejoin="round"${dash} opacity="0.85"/>`,
+      );
+    }
+  }
+
   for (const it of buildings) {
     const g = it.ground.map((p) => toScreen(p, 0));
     const t = it.ground.map((p) => toScreen(p, it.h));
@@ -153,7 +180,16 @@ function isoCity(payload: ScanPayload, meta: ShareMeta, cx: number, cy: number, 
     );
   }
 
-  return `<g clip-path="url(#bubbleClip)">${parts.join('')}</g>`;
+  if (outBounds) {
+    const cw = (maxX - minX) * scale;
+    const ch = (maxY - minY) * scale;
+    const pad = 12;
+    outBounds.x0 = cx - cw / 2 - pad;
+    outBounds.y0 = cy + 10 - ch / 2 - pad;
+    outBounds.x1 = cx + cw / 2 + pad;
+    outBounds.y1 = cy + 10 + ch / 2 + pad;
+  }
+  return `<g clip-path="url(#${clipId})">${parts.join('')}</g>`;
 }
 
 function arcPath(cx: number, cy: number, r: number, a1: number, a2: number): string {
@@ -270,6 +306,31 @@ export function buildArt(meta: ShareMeta | null, payload: ScanPayload | null, se
     <rect width="${W}" height="${H}" fill="#0c0c0b"/>
     ${stars.join('')}
     ${bubble(CX, CY, R, rand, inner)}
+  </svg>`;
+}
+
+export function buildDistrictSchematic(
+  meta: ShareMeta,
+  payload: ScanPayload,
+  seedHex: string,
+): string {
+  const W = 480;
+  const H = 300;
+  const r = 220;
+  const b = { x0: 0, y0: 0, x1: W, y1: H };
+  const inner = isoCity(payload, meta, W / 2, H / 2, r, 'districtClip', true, true, b);
+  if (!inner) return '';
+  const x0 = Math.round(b.x0);
+  const y0 = Math.round(b.y0);
+  const vw = Math.round(b.x1 - b.x0);
+  const vh = Math.round(b.y1 - b.y0);
+  return `<svg width="100%" viewBox="${x0} ${y0} ${vw} ${vh}" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <clipPath id="districtClip"><rect x="${x0}" y="${y0}" width="${vw}" height="${vh}"/></clipPath>
+      <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="4"/></filter>
+    </defs>
+    <rect x="${x0}" y="${y0}" width="${vw}" height="${vh}" fill="#f4f5f7"/>
+    ${inner}
   </svg>`;
 }
 

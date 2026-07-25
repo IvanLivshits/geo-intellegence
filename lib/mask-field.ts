@@ -6,6 +6,8 @@ export interface MaskField {
   avg: number | null;
   min: number | null;
   max: number | null;
+  site?: number | null;
+  siteNote?: string;
   unit: string;
   label: string;
   note: string;
@@ -68,11 +70,13 @@ export interface FieldSpec {
   unit: string;
   label: string;
   note: string;
+  site?: number | null;
+  siteNote?: string;
 }
 
 export function makeField(values: (number | null)[], n: number, spec: FieldSpec): MaskField {
   const stats = fieldFromValues(values, n, spec.ramp, spec.lo, spec.hi, spec.alphaMin, spec.alphaMax);
-  return {
+  const field: MaskField = {
     n,
     rgba: stats.rgba,
     avg: stats.avg,
@@ -82,4 +86,7 @@ export function makeField(values: (number | null)[], n: number, spec: FieldSpec)
     label: spec.label,
     note: spec.note,
   };
+  if ('site' in spec) field.site = spec.site == null ? null : Math.round(spec.site);
+  if (spec.siteNote) field.siteNote = spec.siteNote;
+  return field;
 }

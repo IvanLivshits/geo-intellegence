@@ -104,7 +104,6 @@ export default function MapView({ payload, onBack, backLabel, initial, onUiChang
   const [activeMask, setActiveMask] = useState<MaskKey | null>(
     initial?.activeMask !== undefined ? initial.activeMask : 'noise',
   );
-  const [scenario2050, setScenario2050] = useState(initial?.scenario2050 ?? false);
   const [layerOn, setLayerOn] = useState<Record<BaseLayerKey, boolean>>({
     buildings: true,
     roads: true,
@@ -131,8 +130,8 @@ export default function MapView({ payload, onBack, backLabel, initial, onUiChang
   }, [payload.center, payload.radius]);
 
   useEffect(() => {
-    onUiChange?.({ activeMask, topView, scenario2050 });
-  }, [activeMask, topView, scenario2050, onUiChange]);
+    onUiChange?.({ activeMask, topView });
+  }, [activeMask, topView, onUiChange]);
 
   const project = useMemo(() => {
     const [clon, clat] = payload.center;
@@ -196,14 +195,14 @@ export default function MapView({ payload, onBack, backLabel, initial, onUiChang
 
   const fieldImage = useMemo(() => {
     if (!mounted || !activeMask) return null;
-    const field = payload.masks[activeMask === 'q100' && scenario2050 ? 'q100f' : activeMask];
+    const field = payload.masks[activeMask];
     if (!field) return null;
     const R = payload.radius;
     const clipNorm = zoneLocal
       ? zoneLocal.map(([x, y]): [number, number] => [(x + R) / (2 * R), (R - y) / (2 * R)])
       : undefined;
     return buildFieldCanvas(field, clipNorm);
-  }, [mounted, payload.masks, payload.radius, zoneLocal, activeMask, scenario2050]);
+  }, [mounted, payload.masks, payload.radius, zoneLocal, activeMask]);
 
   const layers = useMemo(() => {
     const R = payload.radius;
@@ -537,8 +536,6 @@ export default function MapView({ payload, onBack, backLabel, initial, onUiChang
         payload={payload}
         activeMask={activeMask}
         onSelectMask={onSelectMask}
-        scenario2050={scenario2050}
-        onToggleScenario={() => setScenario2050((v) => !v)}
       />
     </div>
   );

@@ -60,8 +60,6 @@ export async function computeNoiseMask(ctx: MaskContext): Promise<MaskField> {
     dbs.push(lden);
   }
 
-  console.log(`[noise] field ${n}×${n} ready · cells with sound: ${dbs.length}`);
-
   return {
     n,
     rgba,

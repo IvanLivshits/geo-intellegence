@@ -4,15 +4,12 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ScanPayload } from '@/lib/types';
 import { MASK_META, displayNote, type MaskKey, rampCss } from '@/lib/constants';
-import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
 export interface InspectorProps {
   payload: ScanPayload;
   activeMask: MaskKey | null;
   onSelectMask: (mask: MaskKey) => void;
-  scenario2050: boolean;
-  onToggleScenario: () => void;
 }
 
 const MASK_ORDER = (Object.keys(MASK_META) as MaskKey[]).filter((k) => !MASK_META[k].hidden);
@@ -21,8 +18,6 @@ export default function InspectorPanel({
   payload,
   activeMask,
   onSelectMask,
-  scenario2050,
-  onToggleScenario,
 }: InspectorProps) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -66,14 +61,15 @@ export default function InspectorPanel({
       <div className="px-3 py-3">
         {MASK_ORDER.map((key) => {
           const active = activeMask === key;
-          const effKey = key === 'q100' && scenario2050 ? 'q100f' : key;
+          const effKey = key;
           const meta = MASK_META[key];
-          const mask = payload.masks[active ? effKey : key];
+          const mask = payload.masks[key];
+          const shown = mask ? (mask.site !== undefined ? mask.site : mask.avg) : null;
           const value =
-            mask && mask.avg != null
+            mask && shown != null
               ? active && mask.min != null && mask.max != null
-                ? `${mask.avg} (${mask.min}–${mask.max}) ${MASK_META[effKey].unit}`
-                : `${mask.avg} ${MASK_META[effKey].unit}`
+                ? `${shown} ${MASK_META[effKey].unit} (area ${mask.min}–${mask.max})`
+                : `${shown} ${MASK_META[effKey].unit}`
               : '—';
           return (
             <div key={key}>
@@ -108,19 +104,6 @@ export default function InspectorPanel({
                     <span>{meta.lowLabel}</span>
                     <span>{meta.highLabel}</span>
                   </div>
-                  {key === 'q100' && (
-                    <div className="mt-2 flex items-center justify-between">
-                      <span
-                        className={cn(
-                          'font-mono text-[10px] tracking-wider',
-                          scenario2050 ? 'text-stellar-white' : 'text-ash',
-                        )}
-                      >
-                        Scenario 2050 · clim. RCP 8.5
-                      </span>
-                      <Switch checked={scenario2050} onCheckedChange={onToggleScenario} />
-                    </div>
-                  )}
                 </div>
               )}
             </div>

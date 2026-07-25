@@ -3,6 +3,7 @@ import path from 'node:path';
 import { ImageResponse } from 'next/og';
 import { storageGet } from '@/lib/storage';
 import { SHARE_ID_RE, metaKey, payloadKey } from '@/lib/share';
+import { resolveShareBrand } from '@/lib/user-store';
 import { buildArt } from '@/lib/cosmic-art';
 import type { ScanPayload, ShareMeta } from '@/lib/types';
 
@@ -25,6 +26,25 @@ function loadFonts(): Promise<[Buffer, Buffer, Buffer]> {
     });
   }
   return fontsPromise;
+}
+
+async function loadLogo(url: string | null): Promise<string | null> {
+  if (!url || !/^https?:\/\//i.test(url)) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 2500);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    const type = res.headers.get('content-type') || 'image/png';
+    if (!type.startsWith('image/')) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.byteLength === 0 || buf.byteLength > 2_000_000) return null;
+    return `data:${type};base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function GET(_request: Request, { params }: { params: { id: string } }) {
@@ -51,6 +71,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
   const art = buildArt(meta, payload, (meta?.id ?? '0badc0de').slice(0, 8));
   const artUri = `data:image/svg+xml;base64,${Buffer.from(art).toString('base64')}`;
 
+  const brand = meta ? await resolveShareBrand(meta) : null;
+  const logoUri = brand ? await loadLogo(brand.logo) : null;
+
   return new ImageResponse(
     (
       <div
@@ -76,9 +99,42 @@ export async function GET(_request: Request, { params }: { params: { id: string 
             flexDirection: 'column',
           }}
         >
-          <div style={{ display: 'flex', fontSize: 26, letterSpacing: 4, color: '#7d8187' }}>
-            [ GEO-INTELLIGENCE ]
-          </div>
+          {brand ? (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                {logoUri && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={logoUri}
+                    height={44}
+                    style={{ maxWidth: 240, objectFit: 'contain', marginRight: 22 }}
+                    alt=""
+                  />
+                )}
+                <div
+                  style={{
+                    display: 'flex',
+                    fontSize: 34,
+                    lineHeight: 1.1,
+                    color: '#ffffff',
+                    maxWidth: 520,
+                    overflow: 'hidden',
+                    fontFamily: 'Inter',
+                    letterSpacing: '-0.02em',
+                  }}
+                >
+                  {brand.name}
+                </div>
+              </div>
+              <div style={{ display: 'flex', marginTop: 14, fontSize: 18, letterSpacing: 2, color: '#7d8187' }}>
+                powered by Geo-Intelligence
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', fontSize: 26, letterSpacing: 4, color: '#7d8187' }}>
+              [ GEO-INTELLIGENCE ]
+            </div>
+          )}
           <div
             style={{
               display: 'flex',

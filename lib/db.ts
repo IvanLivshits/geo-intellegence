@@ -34,6 +34,11 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    timestamptz NOT NULL DEFAULT now(),
   last_login_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS brand_name text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS brand_logo text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS brand_phone text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS brand_email text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS brand_website text;
 CREATE TABLE IF NOT EXISTS locations (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -53,6 +58,39 @@ ALTER TABLE locations ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'rea
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS error text;
 ALTER TABLE locations ADD COLUMN IF NOT EXISTS input jsonb;
 CREATE INDEX IF NOT EXISTS locations_user_created_idx ON locations (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS portfolios (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        text NOT NULL,
+  radius      integer NOT NULL DEFAULT 400,
+  total       integer NOT NULL DEFAULT 0,
+  status      text NOT NULL DEFAULT 'processing',
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  finished_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS portfolios_user_created_idx ON portfolios (user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS portfolio_items (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  portfolio_id uuid NOT NULL REFERENCES portfolios(id) ON DELETE CASCADE,
+  position     integer NOT NULL,
+  ref          text NOT NULL,
+  address      text,
+  lat          double precision,
+  lon          double precision,
+  status       text NOT NULL DEFAULT 'pending',
+  error        text,
+  share_id     text,
+  overall_band text,
+  assessed     text,
+  bands        jsonb,
+  vals         jsonb,
+  headline     text,
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS portfolio_items_portfolio_idx ON portfolio_items (portfolio_id, position);
+CREATE INDEX IF NOT EXISTS portfolio_items_pending_idx ON portfolio_items (portfolio_id, status);
 `;
 
 export function ensureSchema(): Promise<void> {
@@ -68,6 +106,28 @@ export function ensureSchema(): Promise<void> {
       });
   }
   return schemaReady;
+}
+
+export async function withTransaction<T>(fn: (q: <R>(text: string, params?: unknown[]) => Promise<R[]>) => Promise<T>): Promise<T> {
+  const p = getPool();
+  if (!p) throw new Error('DATABASE_URL is not set — Postgres is unavailable');
+  await ensureSchema();
+  const client = await p.connect();
+  try {
+    await client.query('BEGIN');
+    const q = async <R>(text: string, params?: unknown[]): Promise<R[]> => {
+      const res = await client.query(text, params);
+      return res.rows as R[];
+    };
+    const out = await fn(q);
+    await client.query('COMMIT');
+    return out;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function query<T>(text: string, params?: unknown[]): Promise<T[]> {

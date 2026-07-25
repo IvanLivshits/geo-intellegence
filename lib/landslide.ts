@@ -26,7 +26,6 @@ export async function computeLandslideMask(ctx: MaskContext): Promise<MaskField>
     createHash('sha1').update(`${lat.toFixed(5)},${lon.toFixed(5)},${radius},${ctx.zoneTag || ''}`).digest('hex');
   const cached = await cacheGet<MaskField>(key);
   if (cached != null) {
-    console.log('[landslide] cache ✓ NASA LHASA');
     return cached;
   }
 

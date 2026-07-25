@@ -1,5 +1,5 @@
 import { createHash, createHmac } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 
 const ENDPOINT = (process.env.R2_ENDPOINT || '').replace(/\/$/, '');
@@ -15,7 +15,7 @@ const sha256hex = (data: Buffer | string) => createHash('sha256').update(data).d
 const hmac = (key: Buffer | string, data: string) => createHmac('sha256', key).update(data).digest();
 
 async function r2Fetch(
-  method: 'GET' | 'PUT',
+  method: 'GET' | 'PUT' | 'DELETE',
   key: string,
   body?: Buffer,
   extraHeaders: Record<string, string> = {},
@@ -79,6 +79,21 @@ export async function storageGet(key: string): Promise<Buffer | null> {
     return await readFile(path.join(FILE_ROOT, key));
   } catch {
     return null;
+  }
+}
+
+export async function storageDelete(key: string): Promise<void> {
+  if (useR2) {
+    const res = await r2Fetch('DELETE', key);
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`R2 DELETE ${key}: HTTP ${res.status} ${await res.text()}`);
+    }
+    return;
+  }
+  try {
+    await unlink(path.join(FILE_ROOT, key));
+  } catch {
+    return;
   }
 }
 

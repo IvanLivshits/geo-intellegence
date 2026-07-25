@@ -91,8 +91,7 @@ export async function sampleElevations(points: DemPoint[]): Promise<(number | nu
       .digest('hex');
   const cached = await cacheGet<(number | null)[]>(key);
   if (cached != null) {
-    console.log('[terrain] cache ✓ Copernicus DEM');
-    return cached;
+      return cached;
   }
 
   const byTile = new Map<string, number[]>();
@@ -102,8 +101,6 @@ export async function sampleElevations(points: DemPoint[]): Promise<(number | nu
     if (list) list.push(i);
     else byTile.set(name, [i]);
   });
-
-  console.log(`[terrain] Copernicus GLO-30 · points: ${points.length} · tiles: ${byTile.size}`);
   const out: (number | null)[] = new Array(points.length).fill(null);
 
   await Promise.all(
@@ -115,7 +112,6 @@ export async function sampleElevations(points: DemPoint[]): Promise<(number | nu
   );
 
   const got = out.filter((v) => v != null).length;
-  console.log(`[terrain] elevations obtained: ${got}/${points.length}`);
   if (got > 0) await cacheSet(key, out, CACHE_TTL_MS);
   return out;
 }

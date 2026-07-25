@@ -63,13 +63,19 @@ export const PLUVIAL_RAMP: RampStop[] = [
   [1.0, [153, 246, 228]],
 ];
 
+export const COASTAL_RAMP: RampStop[] = [
+  [0.0, [56, 189, 248]],
+  [0.5, [37, 99, 235]],
+  [1.0, [30, 27, 105]],
+];
+
 export const LANDSLIDE_RAMP: RampStop[] = [
   [0.0, [254, 240, 138]],
   [0.5, [217, 119, 6]],
   [1.0, [120, 53, 15]],
 ];
 
-export type MaskKey = 'noise' | 'air' | 'flood' | 'q100' | 'q100f' | 'pluvial' | 'landslide';
+export type MaskKey = 'noise' | 'air' | 'flood' | 'q100' | 'coastal' | 'pluvial' | 'landslide';
 
 export type Band = 'low' | 'moderate' | 'high' | 'severe' | 'unknown';
 
@@ -134,13 +140,14 @@ export function classifyBand(meta: MaskMeta, avg: number | null, degraded: boole
 }
 
 const Q100_BANDS: BandStop[] = [
-  { max: 50, band: 'moderate', verdict: 'Within the 100-year flood zone, depth up to ~0.5 m.' },
-  { max: 150, band: 'high', verdict: 'Within the 100-year flood zone, depth 0.5–1.5 m.' },
-  { max: Infinity, band: 'severe', verdict: 'Within the 100-year flood zone, depth above 1.5 m.' },
+  { max: 5, band: 'low', verdict: 'Outside the modelled 100-year river flood zone.' },
+  { max: 50, band: 'moderate', verdict: 'Within the 100-year river flood zone, depth up to ~0.5 m.' },
+  { max: 150, band: 'high', verdict: 'Within the 100-year river flood zone, depth 0.5–1.5 m.' },
+  { max: Infinity, band: 'severe', verdict: 'Within the 100-year river flood zone, depth above 1.5 m.' },
 ];
 const Q100_NOVALUE = {
   band: 'low' as Band,
-  verdict: 'Outside the mapped 100-year flood zone (WRI Aqueduct).',
+  verdict: 'Outside the mapped 100-year river flood zone (JRC). Coastal surge is not covered by this layer.',
 };
 
 export const MASK_META: Record<MaskKey, MaskMeta> = {
@@ -162,8 +169,9 @@ export const MASK_META: Record<MaskKey, MaskMeta> = {
     source: 'Open-Meteo Air Quality (CAMS)', license: 'CC BY 4.0 · free for non-commercial, paid commercial tier', commercialOk: true, kind: 'measured',
     bands: [
       { max: 20, band: 'low', verdict: 'Clean air (EAQI "good").' },
-      { max: 40, band: 'moderate', verdict: 'Acceptable air (EAQI "fair").' },
-      { max: 60, band: 'high', verdict: 'Polluted air (EAQI "poor").' },
+      { max: 40, band: 'low', verdict: 'Acceptable air (EAQI "fair").' },
+      { max: 60, band: 'moderate', verdict: 'Moderate air (EAQI "moderate").' },
+      { max: 80, band: 'high', verdict: 'Polluted air (EAQI "poor").' },
       { max: Infinity, band: 'severe', verdict: 'Heavy pollution (EAQI "very poor").' },
     ],
     noValue: { band: 'unknown', verdict: 'Air quality data unavailable for this location.' },
@@ -181,16 +189,22 @@ export const MASK_META: Record<MaskKey, MaskMeta> = {
     noValue: { band: 'low', verdict: 'No significant water nearby — terrain exposure is minimal.' },
   },
   q100: {
-    key: 'q100', label: 'Flood forecast', unit: 'cm',
-    fallbackNote: 'WRI Aqueduct (GLOFRIS): depth of the 1-in-100-year flood, max of riverine and coastal. ~1 km resolution, WITHOUT local engineered defences.', ramp: Q100_RAMP, lowLabel: 'shallow water', highLabel: 'deep water',
-    source: 'WRI Aqueduct (GLOFRIS) · RP100', license: 'CC BY 4.0', commercialOk: true, kind: 'official',
+    key: 'q100', label: 'River flood Q100', unit: 'cm',
+    fallbackNote: 'JRC Global River Flood Hazard Map (Copernicus EMS, LISFLOOD-FP): depth of the 1-in-100-year RIVER flood at ~1 km. Coastal storm surge is not included — see the Coastal flooding layer. Local engineered defences are not modelled.', ramp: Q100_RAMP, lowLabel: 'shallow water', highLabel: 'deep water',
+    source: 'JRC Global River Flood Hazard Map (Copernicus EMS) · RP100', license: 'CC BY 4.0', commercialOk: true, kind: 'official',
     bands: Q100_BANDS, noValue: Q100_NOVALUE,
   },
-  q100f: {
-    key: 'q100f', label: 'Flood forecast · 2050', unit: 'cm',
-    fallbackNote: 'WRI Aqueduct climate scenario for 2050 (RCP 8.5): depth of the 1-in-100-year flood on a pessimistic emissions path. Values may be higher OR lower than today — climate shifts rainfall both ways.', ramp: Q100_RAMP, lowLabel: 'shallow water', highLabel: 'deep water', hidden: true,
-    source: 'WRI Aqueduct (GLOFRIS) · RP100 · RCP 8.5 · 2050', license: 'CC BY 4.0', commercialOk: true, kind: 'official',
-    bands: Q100_BANDS, noValue: Q100_NOVALUE,
+  coastal: {
+    key: 'coastal', label: 'Coastal flooding', unit: 'cm', ramp: COASTAL_RAMP, lowLabel: 'above surge level', highLabel: 'deep surge',
+    fallbackNote: 'Storm-surge inundation depth AT THE ASSET: the 1-in-100-year extreme sea level (JRC LISCOAST) propagated inland over the DeltaDTM bare-earth coastal terrain by a hydraulic-connectivity flood fill with path attenuation, measured against ground level at the building. Dikes and dunes present in the terrain do block the water; movable barriers, pumping and defence failure are NOT modelled.',
+    source: 'JRC LISCOAST extreme sea levels (RP100) + DeltaDTM bare-earth coastal terrain (Deltares, ICESat-2/GEDI-corrected); connectivity after Poulter & Halpin (2008), attenuation after Vafeidis et al. (2019)', license: 'CC BY 4.0', commercialOk: true, kind: 'modeled',
+    bands: [
+      { max: 5, band: 'low', verdict: 'Dry, or above the 100-year extreme sea level.' },
+      { max: 30, band: 'moderate', verdict: 'Shallow inundation at the asset under the 100-year storm surge.' },
+      { max: 100, band: 'high', verdict: 'Inundated at the asset under the 100-year storm surge.' },
+      { max: Infinity, band: 'severe', verdict: 'Deep inundation at the asset under the 100-year storm surge.' },
+    ],
+    noValue: { band: 'unknown', verdict: 'Ground level at the asset could not be established, so surge exposure was not assessed.' },
   },
   pluvial: {
     key: 'pluvial', label: 'Pluvial flooding', unit: 'cm',
@@ -217,6 +231,8 @@ export const MASK_META: Record<MaskKey, MaskMeta> = {
     noValue: { band: 'low', verdict: 'Flat / stable terrain.' },
   },
 };
+
+export const AMENITY_KEYS: MaskKey[] = ['noise', 'air'];
 
 export type ActivityCategory = 'nightlife' | 'retail' | 'venue' | 'hub' | 'hazard';
 
