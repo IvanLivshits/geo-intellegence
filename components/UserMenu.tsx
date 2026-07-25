@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { signIn, signOut } from 'next-auth/react';
-import { Briefcase, MapPin, Palette, LogOut } from 'lucide-react';
+import { MapPin, Palette, LogOut } from 'lucide-react';
 
 export interface SessionUser {
   name: string | null;
@@ -73,12 +73,6 @@ export default function UserMenu({ user }: { user: SessionUser | null }) {
             className="flex items-center gap-3 px-4 py-3 font-mono text-mono-badge uppercase tracking-widest text-ash transition-colors hover:bg-charcoal hover:text-stellar-white"
           >
             <MapPin size={13} /> Saved locations
-          </a>
-          <a
-            href="/portfolio"
-            className="flex items-center gap-3 px-4 py-3 font-mono text-mono-badge uppercase tracking-widest text-ash transition-colors hover:bg-charcoal hover:text-stellar-white"
-          >
-            <Briefcase size={13} /> Portfolios
           </a>
           <a
             href="/account/brand"

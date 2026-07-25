@@ -8,9 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "scan": "tsx --conditions=react-server cli.ts",
-    "worker": "NARRATION_DEADLINE_MS=240000 tsx --conditions=react-server worker.ts",
-    "worker:dev": "NARRATION_DEADLINE_MS=240000 tsx --conditions=react-server --env-file=.env worker.ts"
+    "scan": "tsx --conditions=react-server cli.ts"
   },
   "dependencies": {
     "@deck.gl/core": "9.0.33",
